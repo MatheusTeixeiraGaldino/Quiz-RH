@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>QuizLive</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#0a0a0f;
+  --surface:#13131a;
+  --surface2:#1c1c27;
+  --border:#2a2a3a;
+  --accent:#7c6aff;
+  --accent2:#ff6a9b;
+  --accent3:#6affdb;
+  --text:#f0f0ff;
+  --muted:#8888aa;
+  --green:#4ade80;
+  --red:#f87171;
+  --yellow:#facc15;
+  --radius:14px;
+  --radius-sm:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+h1,h2,h3{font-family:'Syne',sans-serif}
+
+/* LAYOUT */
+#app{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+.screen{width:100%;max-width:480px;padding:24px 20px;min-height:100vh;display:flex;flex-direction:column;gap:16px;animation:fadeIn .3s ease}
+.screen.wide{max-width:700px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* HEADER */
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:100;width:100%;max-width:700px}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:20px;letter-spacing:-0.5px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.card-title{font-family:'Syne',sans-serif;font-weight:700;font-size:16px;margin-bottom:12px;color:var(--text)}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;cursor:pointer;border:none;transition:all .18s;text-decoration:none;width:100%}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#6a57ff;transform:translateY(-1px)}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-danger{background:#3a1a1a;color:var(--red);border:1px solid #4a2a2a}
+.btn-danger:hover{background:#4a2020}
+.btn-success{background:#0f3a1a;color:var(--green);border:1px solid #1a4a2a}
+.btn-sm{padding:8px 16px;font-size:13px;width:auto}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+/* INPUTS */
+.input-wrap{display:flex;flex-direction:column;gap:6px}
+label{font-size:13px;color:var(--muted);font-weight:500}
+input,textarea,select{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;padding:11px 14px;width:100%;transition:border .15s;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:70px}
+select option{background:var(--surface2)}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:99px;font-size:12px;font-weight:600;letter-spacing:.3px}
+.badge-purple{background:#2a1f5a;color:#a89bff}
+.badge-green{background:#0f2a1a;color:#4ade80}
+.badge-red{background:#2a1010;color:#f87171}
+.badge-yellow{background:#2a1f00;color:#facc15}
+.badge-pink{background:#2a1020;color:#f472b6}
+
+/* DIVIDER */
+.divider{height:1px;background:var(--border);margin:4px 0}
+
+/* TABS */
+.tabs{display:flex;gap:4px;background:var(--surface);border-radius:var(--radius-sm);padding:4px}
+.tab{flex:1;text-align:center;padding:8px;font-size:13px;font-weight:500;border-radius:6px;cursor:pointer;color:var(--muted);transition:all .15s}
+.tab.active{background:var(--accent);color:#fff}
+
+/* AVATAR GRID */
+.avatar-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.avatar-opt{width:100%;aspect-ratio:1;border-radius:50%;font-size:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--surface2);border:2px solid transparent;transition:all .15s}
+.avatar-opt:hover{border-color:var(--accent);transform:scale(1.08)}
+.avatar-opt.selected{border-color:var(--accent);background:#2a1f5a;transform:scale(1.1)}
+
+/* QUESTION CARD (game) */
+.question-text{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;line-height:1.3;margin-bottom:20px}
+.options-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.opt-btn{padding:14px 12px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);transition:all .18s;text-align:left;line-height:1.3}
+.opt-btn:hover:not(:disabled){border-color:var(--accent);background:#1a1a2e;transform:translateY(-2px)}
+.opt-btn:disabled{cursor:default}
+.opt-btn.correct{background:#0f2a1a;border-color:var(--green);color:var(--green)}
+.opt-btn.wrong{background:#2a1010;border-color:var(--red);color:var(--red)}
+.opt-btn.selected-neutral{border-color:var(--accent);background:#1e1a3a}
+
+/* RANKING */
+.rank-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);transition:all .2s}
+.rank-item.top1{border-color:#facc15;background:#1a1600}
+.rank-item.top2{border-color:#94a3b8;background:#131620}
+.rank-item.top3{border-color:#cd7c32;background:#1a1008}
+.rank-num{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;min-width:28px;text-align:center}
+.rank-avatar{font-size:26px}
+.rank-name{font-weight:500;flex:1}
+.rank-score{font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--accent)}
+
+/* PODIUM */
+.podium{display:flex;align-items:flex-end;justify-content:center;gap:12px;padding:20px 0}
+.podium-col{display:flex;flex-direction:column;align-items:center;gap:8px}
+.podium-emoji{font-size:36px}
+.podium-name{font-size:13px;font-weight:600;text-align:center;max-width:90px;word-break:break-word}
+.podium-score{font-size:12px;color:var(--muted)}
+.podium-block{border-radius:var(--radius-sm) var(--radius-sm) 0 0;width:80px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:22px;padding:8px}
+.p1{background:linear-gradient(180deg,#facc15,#d97706);height:90px;color:#1a1000}
+.p2{background:linear-gradient(180deg,#94a3b8,#64748b);height:65px;color:#0a0e1a}
+.p3{background:linear-gradient(180deg,#cd7c32,#92400e);height:48px;color:#1a0800}
+
+/* TIMER */
+.timer-bar{height:6px;background:var(--surface2);border-radius:99px;overflow:hidden;margin-bottom:16px}
+.timer-fill{height:100%;background:var(--accent);border-radius:99px;transition:width 1s linear}
+
+/* WAIT SCREEN */
+.pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.big-emoji{font-size:72px;text-align:center;margin:16px 0}
+
+/* TOAST */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 20px;font-size:14px;transition:transform .3s;z-index:999;pointer-events:none;white-space:nowrap}
+#toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ADMIN CONTROL */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat-box{background:var(--surface2);border-radius:var(--radius-sm);padding:14px;text-align:center}
+.stat-num{font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:var(--accent)}
+.stat-label{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* QR */
+#qr-canvas{background:#fff;border-radius:var(--radius);padding:12px;display:block;margin:0 auto}
+
+/* PROGRESS */
+.q-progress{display:flex;gap:4px;margin:8px 0}
+.q-dot{flex:1;height:4px;border-radius:99px;background:var(--border)}
+.q-dot.done{background:var(--accent)}
+.q-dot.current{background:var(--accent2)}
+
+/* answer count */
+.answer-count{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm)}
+
+/* scrollable */
+.scroll-list{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto}
+.scroll-list::-webkit-scrollbar{width:4px}
+.scroll-list::-webkit-scrollbar-track{background:transparent}
+.scroll-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+
+/* home hero */
+.hero{text-align:center;padding:40px 0 20px}
+.hero h1{font-size:42px;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.1;margin-bottom:10px}
+.hero p{color:var(--muted);font-size:15px}
+
+/* question builder */
+.q-builder{display:flex;flex-direction:column;gap:10px;padding:16px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)}
+.q-list-item{display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)}
+.q-list-item-num{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);min-width:24px}
+.q-list-item-text{flex:1;font-size:14px;line-height:1.4}
+.q-list-item-score{font-size:12px;color:var(--muted)}
+
+.option-row{display:flex;gap:8px;align-items:center}
+.option-row input{flex:1}
+.correct-radio{width:20px;height:20px;accent-color:var(--green);cursor:pointer;flex-shrink:0}
+
+/* waiting players */
+.player-chips{display:flex;flex-wrap:wrap;gap:8px}
+.player-chip{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:99px;font-size:13px}
+
+/* mobile safe */
+@media(max-width:400px){
+  .options-grid{grid-template-columns:1fr}
+  .hero h1{font-size:32px}
+}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div id="app"></div>
+
+<!-- Firebase SDKs -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, doc, setDoc, getDoc, getDocs, updateDoc, onSnapshot, query, where, orderBy, increment, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+// ─── Firebase Config ────────────────────────────────────────────────────────
+const app = initializeApp({
+  apiKey: "AIzaSyCJVh32y23TQYaVyeuARiCOjsJu9QJFqOU",
+  authDomain: "quiz-realtime-290ec.firebaseapp.com",
+  projectId: "quiz-realtime-290ec",
+  storageBucket: "quiz-realtime-290ec.firebasestorage.app",
+  messagingSenderId: "423790720358",
+  appId: "1:423790720358:web:fca076cd69d434f8cd84a7"
+});
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// ─── State ──────────────────────────────────────────────────────────────────
+let state = {
+  view: 'home',
+  user: null,
+  roomId: null,
+  room: null,
+  playerId: null,
+  playerName: '',
+  playerAvatar: '🦊',
+  questions: [],
+  answers: [],
+  players: [],
+  currentAnswer: null,
+  unsubs: [],
+  buildingQuestion: null,
+};
+
+const AVATARS = ['🦊','🐺','🐸','🦁','🐯','🐻','🐼','🐨','🦅','🦋','🐙','🦄','🐲','👾','🤖','🎃','🧸','🦖','🦑','🐬'];
+
+// ─── Routing ─────────────────────────────────────────────────────────────────
+function parseRoute() {
+  const hash = location.hash.replace('#','') || '/';
+  const parts = hash.split('/').filter(Boolean);
+  return parts;
+}
+
+function navigate(path) {
+  location.hash = path;
+}
+
+window.addEventListener('hashchange', handleRoute);
+window.addEventListener('load', handleRoute);
+
+async function handleRoute() {
+  const parts = parseRoute();
+  // sign in anon if not signed in
+  if (!state.user) {
+    try { state.user = (await signInAnonymously(auth)).user; } catch(e){}
+  }
+  clearSubs();
+
+  if (!parts.length || parts[0] === '') { return render('home'); }
+  if (parts[0] === 'admin') { return render('admin-create'); }
+  if (parts[0] === 'room') {
+    const roomId = parts[1];
+    state.roomId = roomId;
+    const mode = parts[2];
+    if (mode === 'control') return render('admin-control');
+    if (mode === 'ranking') return render('ranking');
+    if (mode === 'podium') return render('podium');
+  }
+  if (parts[0] === 'join') {
+    state.roomId = parts[1];
+    return render('player-join');
+  }
+  if (parts[0] === 'wait') {
+    state.roomId = parts[1];
+    return render('player-wait');
+  }
+  if (parts[0] === 'play') {
+    state.roomId = parts[1];
+    return render('player-game');
+  }
+  render('home');
+}
+
+function clearSubs() {
+  state.unsubs.forEach(u => u());
+  state.unsubs = [];
+  state.currentAnswer = null;
+}
+
+// ─── Render dispatcher ───────────────────────────────────────────────────────
+function render(view) {
+  state.view = view;
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  const views = { 'home': renderHome, 'admin-create': renderAdminCreate, 'admin-control': renderAdminControl, 'player-join': renderPlayerJoin, 'player-wait': renderPlayerWait, 'player-game': renderPlayerGame, 'ranking': renderRanking, 'podium': renderPodium };
+  if (views[view]) views[view](app);
+}
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+function toast(msg, duration=2800) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), duration);
+}
+
+// ─── HOME ────────────────────────────────────────────────────────────────────
+function renderHome(app) {
+  app.innerHTML = `
+  <div class="screen" style="justify-content:center;min-height:100vh">
+    <div class="hero">
+      <h1>QuizLive</h1>
+      <p>Quiz em tempo real para grupos e salas de aula</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary" id="btn-admin">🎮 Criar sala (Admin)</button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="divider" style="flex:1"></div>
+        <span style="color:var(--muted);font-size:13px">ou</span>
+        <div class="divider" style="flex:1"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Entrar com código</div>
+        <div style="display:flex;gap:8px">
+          <input id="join-code" placeholder="Código da sala" style="text-transform:uppercase;letter-spacing:2px" maxlength="20"/>
+          <button class="btn btn-secondary btn-sm" id="btn-join-code" style="white-space:nowrap">Entrar</button>
+        </div>
+      </div>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:auto;padding-bottom:16px">Escaneie o QR Code da sala para entrar direto</p>
+  </div>`;
+  document.getElementById('btn-admin').onclick = () => navigate('/admin');
+  document.getElementById('btn-join-code').onclick = () => {
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    if (!code) return toast('Digite o código da sala');
+    state.roomId = code;
+    navigate('/join/'+code);
+  };
+  document.getElementById('join-code').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('btn-join-code').click(); });
+}
+
+// ─── ADMIN CREATE ────────────────────────────────────────────────────────────
+function renderAdminCreate(app) {
+  let questions = [];
+  let editingIdx = null;
+
+  function getHtml() {
+    return `
+    <div class="top-bar"><span class="logo">QuizLive</span><button class="btn btn-secondary btn-sm" id="btn-home">← Home</button></div>
+    <div class="screen wide" style="min-height:unset">
+      <div class="card">
+        <div class="card-title">1. Configure a sala</div>
+        <div class="input-wrap">
+          <label>Nome da sala</label>
+          <input id="room-name" placeholder="Ex: Quiz de História — Turma A" value="${state.draft?.nome||''}"/>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">2. Perguntas (${questions.length})</div>
+        <div id="q-list" class="scroll-list" style="max-height:260px;margin-bottom:12px">
+          ${questions.length===0?`<p style="color:var(--muted);font-size:14px;text-align:center;padding:20px 0">Nenhuma pergunta ainda</p>`:
+            questions.map((q,i)=>`
+            <div class="q-list-item">
+              <span class="q-list-item-num">${i+1}</span>
+              <div style="flex:1">
+                <div class="q-list-item-text">${q.pergunta}</div>
+                <div class="q-list-item-score">${q.pontuacao} pts · Correta: opção ${q.correta+1}</div>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-secondary btn-sm" onclick="window._editQ(${i})">✏️</button>
+                <button class="btn btn-danger btn-sm" onclick="window._delQ(${i})">🗑️</button>
+              </div>
+            </div>`).join('')}
+        </div>
+        <div id="q-builder" class="q-builder">
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--accent)">${editingIdx!==null?'Editando pergunta':'Nova pergunta'}</div>
+          <div class="input-wrap"><label>Enunciado</label><textarea id="q-text" placeholder="Digite a pergunta..."></textarea></div>
+          ${[0,1,2,3].map(i=>`
+          <div class="option-row">
+            <input type="radio" name="correta" value="${i}" class="correct-radio" title="Marcar como correta"/>
+            <input id="opt-${i}" placeholder="Opção ${i+1}"/>
+          </div>`).join('')}
+          <div class="input-wrap"><label>Pontuação</label><input id="q-pontos" type="number" value="100" min="10" max="1000"/></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-success btn-sm" id="btn-add-q">✓ ${editingIdx!==null?'Salvar':'Adicionar'}</button>
+            ${editingIdx!==null?`<button class="btn btn-secondary btn-sm" id="btn-cancel-edit">Cancelar</button>`:''}
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-create-room">🚀 Criar sala e gerar QR Code</button>
+    </div>`;
+  }
+
+  function fillEditForm(idx) {
+    editingIdx = idx;
+    const q = questions[idx];
+    document.getElementById('q-text').value = q.pergunta;
+    [0,1,2,3].forEach(i=>{ document.getElementById('opt-'+i).value = q.opcoes[i]||''; });
+    document.querySelector(`input[name="correta"][value="${q.correta}"]`).checked = true;
+    document.getElementById('q-pontos').value = q.pontuacao;
+    document.getElementById('btn-add-q').textContent = '✓ Salvar';
+    if (!document.getElementById('btn-cancel-edit')) {
+      const btn = document.createElement('button');
+      btn.className='btn btn-secondary btn-sm'; btn.id='btn-cancel-edit'; btn.textContent='Cancelar';
+      btn.onclick=()=>{ editingIdx=null; fillForm(); };
+      document.getElementById('btn-add-q').after(btn);
+    }
+  }
+
+  function fillForm() {
+    document.getElementById('q-text').value='';
+    [0,1,2,3].forEach(i=>document.getElementById('opt-'+i).value='');
+    document.querySelectorAll('input[name="correta"]').forEach(r=>r.checked=false);
+    document.getElementById('q-pontos').value=100;
+    document.getElementById('btn-add-q').textContent='✓ Adicionar';
+    document.getElementById('btn-cancel-edit')?.remove();
+  }
+
+  function bindEvents() {
+    document.getElementById('btn-home').onclick = ()=>navigate('/');
+    document.getElementById('btn-add-q').onclick = () => {
+      const pergunta = document.getElementById('q-text').value.trim();
+      const opcoes = [0,1,2,3].map(i=>document.getElementById('opt-'+i).value.trim());
+      const correctaEl = document.querySelector('input[name="correta"]:checked');
+      const pontuacao = parseInt(document.getElementById('q-pontos').value)||100;
+      if (!pergunta) return toast('Digite o enunciado');
+      if (opcoes.filter(Boolean).length < 2) return toast('Adicione ao menos 2 opções');
+      if (!correctaEl) return toast('Marque a resposta correta');
+      const q = { pergunta, opcoes, correta: parseInt(correctaEl.value), pontuacao };
+      if (editingIdx!==null) { questions[editingIdx]=q; editingIdx=null; }
+      else questions.push(q);
+      rebind();
+    };
+    document.getElementById('btn-cancel-edit')?.addEventListener('click',()=>{ editingIdx=null; fillForm(); });
+    document.getElementById('btn-create-room').onclick = createRoom;
+    window._editQ = i => { fillEditForm(i); };
+    window._delQ = i => { questions.splice(i,1); rebind(); };
+  }
+
+  function rebind() {
+    app.innerHTML = getHtml();
+    bindEvents();
+    if (editingIdx!==null) fillEditForm(editingIdx);
+  }
+
+  async function createRoom() {
+    const nome = document.getElementById('room-name').value.trim();
+    if (!nome) return toast('Digite o nome da sala');
+    if (questions.length===0) return toast('Adicione ao menos uma pergunta');
+    const btn = document.getElementById('btn-create-room');
+    btn.disabled=true; btn.textContent='Criando...';
+    try {
+      const roomRef = await addDoc(collection(db,'rooms'),{ nome, status:'waiting', currentQuestion:0, adminUid: state.user?.uid||'', criadoEm: serverTimestamp(), totalQuestions: questions.length });
+      const roomId = roomRef.id;
+      for (let i=0;i<questions.length;i++) {
+        await addDoc(collection(db,'questions'),{ ...questions[i], roomId, ordem:i });
+      }
+      state.roomId = roomId;
+      navigate('/room/'+roomId+'/control');
+    } catch(e) { toast('Erro: '+e.message); btn.disabled=false; btn.textContent='🚀 Criar sala'; }
+  }
+
+  app.innerHTML = getHtml();
+  bindEvents();
+}
+
+// ─── ADMIN CONTROL ───────────────────────────────────────────────────────────
+function renderAdminControl(app) {
+  const roomId = state.roomId;
+  let room=null, questions=[], players=[], answers=[];
+  let qrGenerated=false;
+
+  app.innerHTML=`<div class="top-bar"><span class="logo">QuizLive</span><span id="room-status-badge" class="badge badge-yellow">Aguardando</span></div><div class="screen wide" id="ctrl-body"></div>`;
+
+  function getLink() { return `${location.origin}${location.pathname}#/join/${roomId}`; }
+
+  function draw() {
+    const body = document.getElementById('ctrl-body');
+    if (!body) return;
+    const cq = room?.currentQuestion??0;
+    const totalQ = questions.length;
+    const currentQ = questions[cq];
+    const answeredNow = answers.filter(a=>a.questionId===currentQ?.id).length;
+    const badge = document.getElementById('room-status-badge');
+    if(badge){ badge.className='badge '+(room?.status==='playing'?'badge-green':room?.status==='finished'?'badge-red':'badge-yellow'); badge.textContent = room?.status==='playing'?'Ao vivo':room?.status==='finished'?'Encerrado':'Aguardando'; }
+
+    if (room?.status==='waiting') {
+      body.innerHTML=`
+      <div class="card">
+        <div class="card-title">🔗 Link & QR Code da sala</div>
+        <div style="word-break:break-all;font-size:13px;color:var(--muted);margin-bottom:10px">${getLink()}</div>
+        <canvas id="qr-canvas" width="200" height="200"></canvas>
+        <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="navigator.clipboard.writeText('${getLink()}');window._toast('Link copiado!')">📋 Copiar link</button>
+      </div>
+      <div class="card">
+        <div class="card-title">👥 Participantes (${players.length})</div>
+        <div class="player-chips" id="player-chips">${players.map(p=>`<div class="player-chip"><span>${p.avatar}</span><span>${p.nome}</span></div>`).join('')||'<span style="color:var(--muted);font-size:13px">Aguardando jogadores...</span>'}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 Perguntas (${totalQ})</div>
+        ${questions.map((q,i)=>`<div class="q-list-item" style="margin-bottom:6px"><span class="q-list-item-num">${i+1}</span><div class="q-list-item-text">${q.pergunta}</div></div>`).join('')}
+      </div>
+      ${players.length>0?`<button class="btn btn-primary" id="btn-start">🚀 Iniciar jogo (${players.length} jogadores)</button>`:`<button class="btn btn-primary" disabled>Aguardando jogadores...</button>`}`;
+      setTimeout(()=>{
+        const canvas=document.getElementById('qr-canvas');
+        if(canvas && !qrGenerated){ qrGenerated=true; QRCode.toCanvas(canvas,getLink(),{width:200,margin:1,color:{dark:'#000',light:'#fff'}}); }
+      },100);
+      document.getElementById('btn-start')?.addEventListener('click', startGame);
+    } else if (room?.status==='playing') {
+      const progress = `<div class="q-progress">${questions.map((_,i)=>`<div class="q-dot ${i<cq?'done':i===cq?'current':''}"></div>`).join('')}</div>`;
+      body.innerHTML=`
+      ${progress}
+      <div class="card">
+        <div class="card-title">Pergunta ${cq+1} / ${totalQ}</div>
+        <div style="font-size:16px;line-height:1.4;margin-bottom:12px">${currentQ?.pergunta||''}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          ${(currentQ?.opcoes||[]).map((o,i)=>`<div style="padding:8px 12px;border-radius:8px;font-size:13px;border:1.5px solid ${i===currentQ?.correta?'var(--green)':'var(--border)'};background:${i===currentQ?.correta?'#0f2a1a':'var(--surface2)'};">${o}</div>`).join('')}
+        </div>
+        <div class="answer-count">
+          <span style="font-size:20px">✍️</span>
+          <span style="font-size:14px;color:var(--muted)">Responderam:</span>
+          <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:18px;color:var(--accent)">${answeredNow}</span>
+          <span style="color:var(--muted);font-size:13px">/ ${players.length}</span>
+        </div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-num">${players.length}</div><div class="stat-label">Jogadores</div></div>
+        <div class="stat-box"><div class="stat-num">${cq+1}/${totalQ}</div><div class="stat-label">Pergunta</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${cq<totalQ-1?`<button class="btn btn-primary" id="btn-next">Próxima pergunta →</button>`:`<button class="btn btn-success" id="btn-finish">🏁 Encerrar e ver pódio</button>`}
+        <button class="btn btn-danger btn-sm" id="btn-end">⏹️ Encerrar jogo</button>
+      </div>
+      <div class="card">
+        <div class="card-title">📊 Ranking parcial</div>
+        <div class="scroll-list">${renderRankList(players,5)}</div>
+      </div>`;
+      document.getElementById('btn-next')?.addEventListener('click', nextQuestion);
+      document.getElementById('btn-finish')?.addEventListener('click', finishGame);
+      document.getElementById('btn-end')?.addEventListener('click', finishGame);
+    } else if (room?.status==='finished') {
+      body.innerHTML=`
+      <div class="card" style="text-align:center">
+        <div style="font-size:48px;margin-bottom:8px">🏁</div>
+        <div class="card-title">Jogo encerrado!</div>
+        <p style="color:var(--muted);font-size:14px">Veja o pódio e o ranking final</p>
+      </div>
+      <button class="btn btn-primary" onclick="navigate('/room/${roomId}/podium')">🏆 Ver pódio</button>
+      <button class="btn btn-secondary" onclick="navigate('/room/${roomId}/ranking')">📊 Ver ranking completo</button>
+      <button class="btn btn-secondary" onclick="navigate('/admin')">+ Nova sala</button>`;
+    }
+  }
+
+  async function startGame() {
+    await updateDoc(doc(db,'rooms',roomId),{status:'playing',currentQuestion:0});
+  }
+  async function nextQuestion() {
+    const next = (room?.currentQuestion||0)+1;
+    await updateDoc(doc(db,'rooms',roomId),{currentQuestion:next});
+  }
+  async function finishGame() {
+    await updateDoc(doc(db,'rooms',roomId),{status:'finished'});
+  }
+
+  // listeners
+  state.unsubs.push(onSnapshot(doc(db,'rooms',roomId), snap=>{ room={id:snap.id,...snap.data()}; draw(); }));
+  state.unsubs.push(onSnapshot(query(collection(db,'questions'),where('roomId','==',roomId),orderBy('ordem')), snap=>{ questions=snap.docs.map(d=>({id:d.id,...d.data()})); draw(); }));
+  state.unsubs.push(onSnapshot(query(collection(db,'players'),where('roomId','==',roomId)), snap=>{ players=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.score||0)-(a.score||0)); draw(); }));
+  state.unsubs.push(onSnapshot(query(collection(db,'answers'),where('roomId','==',roomId)), snap=>{ answers=snap.docs.map(d=>d.data()); }));
+
+  window._toast = toast;
+}
+
+// ─── PLAYER JOIN ─────────────────────────────────────────────────────────────
+function renderPlayerJoin(app) {
+  const roomId = state.roomId;
+  let selectedAvatar = state.playerAvatar||'🦊';
+
+  app.innerHTML=`
+  <div class="screen" style="justify-content:center">
+    <div class="hero" style="padding:24px 0 10px"><h1 style="font-size:28px">Entrar na sala</h1></div>
+    <div class="card">
+      <div class="card-title">Seu nome</div>
+      <input id="player-name" placeholder="Como você quer ser chamado?" value="${state.playerName||''}" maxlength="24"/>
+    </div>
+    <div class="card">
+      <div class="card-title">Escolha seu avatar</div>
+      <div class="avatar-grid" id="avatar-grid">
+        ${AVATARS.map(a=>`<div class="avatar-opt${a===selectedAvatar?' selected':''}" data-av="${a}" onclick="window._pickAv('${a}')">${a}</div>`).join('')}
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-enter">🎮 Entrar na sala</button>
+    <button class="btn btn-secondary btn-sm" onclick="navigate('/')">← Voltar</button>
+  </div>`;
+
+  window._pickAv = av => {
+    selectedAvatar = av;
+    document.querySelectorAll('.avatar-opt').forEach(el=>el.classList.toggle('selected',el.dataset.av===av));
+  };
+
+  document.getElementById('btn-enter').onclick = async () => {
+    const nome = document.getElementById('player-name').value.trim();
+    if (!nome) return toast('Digite seu nome');
+    const btn = document.getElementById('btn-enter');
+    btn.disabled=true; btn.textContent='Entrando...';
+    // check room exists
+    const roomSnap = await getDoc(doc(db,'rooms',roomId));
+    if (!roomSnap.exists()) { toast('Sala não encontrada'); btn.disabled=false; btn.textContent='🎮 Entrar'; return; }
+    const roomData = roomSnap.data();
+    if (roomData.status==='finished') { toast('Esta sala já encerrou'); btn.disabled=false; return; }
+    state.playerName = nome;
+    state.playerAvatar = selectedAvatar;
+    // create or update player
+    if (!state.user) state.user = (await signInAnonymously(auth)).user;
+    state.playerId = state.user.uid;
+    await setDoc(doc(db,'players',state.playerId),{ nome, avatar:selectedAvatar, score:0, roomId, entradoEm: serverTimestamp() });
+    if (roomData.status==='playing') { navigate('/play/'+roomId); }
+    else { navigate('/wait/'+roomId); }
+  };
+}
+
+// ─── PLAYER WAIT ─────────────────────────────────────────────────────────────
+function renderPlayerWait(app) {
+  const roomId = state.roomId;
+  app.innerHTML=`
+  <div class="screen" style="justify-content:center;align-items:center;text-align:center">
+    <div style="font-size:60px;margin-bottom:8px">${state.playerAvatar||'🦊'}</div>
+    <h2 style="font-family:'Syne',sans-serif;font-weight:700">${state.playerName||'Jogador'}</h2>
+    <p style="color:var(--muted);margin:8px 0 24px">Você está na sala!</p>
+    <div class="big-emoji pulse">⏳</div>
+    <p style="color:var(--muted);font-size:15px">Aguardando o admin iniciar o jogo...</p>
+    <div id="player-count" style="margin-top:24px"></div>
+  </div>`;
+
+  state.unsubs.push(onSnapshot(doc(db,'rooms',roomId), snap=>{
+    const data = snap.data();
+    if (data?.status==='playing') { clearSubs(); navigate('/play/'+roomId); }
+  }));
+  state.unsubs.push(onSnapshot(query(collection(db,'players'),where('roomId','==',roomId)), snap=>{
+    const el = document.getElementById('player-count');
+    if (el) el.innerHTML=`<span class="badge badge-purple">👥 ${snap.size} jogadores na sala</span>`;
+  }));
+}
+
+// ─── PLAYER GAME ─────────────────────────────────────────────────────────────
+function renderPlayerGame(app) {
+  const roomId = state.roomId;
+  const playerId = state.playerId || state.user?.uid;
+  let questions=[], room=null, answered={};
+
+  app.innerHTML=`<div class="screen" id="game-body"></div>`;
+
+  function draw() {
+    const body = document.getElementById('game-body');
+    if (!body || !room) return;
+    const cq = room.currentQuestion||0;
+    const q = questions[cq];
+
+    if (room.status==='finished') {
+      body.innerHTML=`<div style="text-align:center;padding:40px 0">
+        <div style="font-size:60px">🏁</div>
+        <h2 style="font-family:'Syne',sans-serif;margin:12px 0">Fim de jogo!</h2>
+        <p style="color:var(--muted)">Veja o ranking final</p>
+        <button class="btn btn-primary" style="margin-top:20px" onclick="navigate('/room/${roomId}/podium')">🏆 Ver pódio</button>
+      </div>`; return;
+    }
+    if (!q) { body.innerHTML=`<div style="text-align:center;padding:40px 0"><div class="big-emoji pulse">⏳</div><p style="color:var(--muted)">Aguardando próxima pergunta...</p></div>`; return; }
+
+    const myAnswer = answered[q.id];
+    const totalQ = questions.length;
+    const progress = `<div class="q-progress" style="margin-bottom:16px">${questions.map((_,i)=>`<div class="q-dot ${i<cq?'done':i===cq?'current':''}"></div>`).join('')}</div>`;
+
+    let optsHtml;
+    if (myAnswer !== undefined) {
+      optsHtml = (q.opcoes||[]).map((o,i)=>`
+      <button class="opt-btn ${i===q.correta?'correct':i===myAnswer&&i!==q.correta?'wrong':''}" disabled>${LABELS[i]} ${o}</button>`).join('');
+    } else {
+      optsHtml = (q.opcoes||[]).map((o,i)=>`
+      <button class="opt-btn" onclick="window._answer(${i})">${LABELS[i]} ${o}</button>`).join('');
+    }
+
+    const feedback = myAnswer!==undefined ? `<div style="text-align:center;padding:12px;border-radius:var(--radius);margin-bottom:8px;background:${myAnswer===q.correta?'#0f2a1a':'#2a1010'};color:${myAnswer===q.correta?'var(--green)':'var(--red)'}"><span style="font-size:24px">${myAnswer===q.correta?'✅':'❌'}</span><div style="font-weight:600;margin-top:4px">${myAnswer===q.correta?`+${q.pontuacao} pontos!`:'Não foi dessa vez...'}</div></div>` : '';
+
+    body.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="color:var(--muted);font-size:13px">Pergunta ${cq+1}/${totalQ}</span>
+      <span class="badge badge-purple">${q.pontuacao} pts</span>
+    </div>
+    ${progress}
+    <div class="question-text">${q.pergunta}</div>
+    ${feedback}
+    <div class="options-grid">${optsHtml}</div>
+    <div style="margin-top:20px;text-align:center">
+      <div style="font-size:13px;color:var(--muted)">Sua pontuação</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--accent)">${getMyScore()}</div>
+    </div>`;
+
+    window._answer = async (idx) => {
+      if (answered[q.id]!==undefined) return;
+      answered[q.id] = idx;
+      const correta = idx===q.correta;
+      const pts = correta?q.pontuacao:0;
+      const ansId = `${playerId}_${q.id}`;
+      const exists = await getDoc(doc(db,'answers',ansId));
+      if (!exists.exists()) {
+        await setDoc(doc(db,'answers',ansId),{ playerId, questionId:q.id, roomId, resposta:idx, correta, pontosGanhos:pts, ts:Date.now() });
+        if (pts>0) await updateDoc(doc(db,'players',playerId),{ score: increment(pts) });
+      }
+      draw();
+    };
+  }
+
+  function getMyScore() {
+    return Object.values(answered).reduce((acc,_,i)=>acc,0); // computed from server
+  }
+
+  const LABELS = ['A','B','C','D'];
+
+  state.unsubs.push(onSnapshot(doc(db,'rooms',roomId), snap=>{ room={id:snap.id,...snap.data()}; draw(); }));
+  state.unsubs.push(onSnapshot(query(collection(db,'questions'),where('roomId','==',roomId),orderBy('ordem')), snap=>{ questions=snap.docs.map(d=>({id:d.id,...d.data()})); draw(); }));
+  // load my existing answers
+  state.unsubs.push(onSnapshot(query(collection(db,'answers'),where('playerId','==',playerId),where('roomId','==',roomId)), snap=>{
+    snap.docs.forEach(d=>{ const data=d.data(); answered[data.questionId]=data.resposta; });
+    draw();
+  }));
+}
+
+// ─── RANKING ─────────────────────────────────────────────────────────────────
+function renderRanking(app) {
+  const roomId = state.roomId;
+  app.innerHTML=`<div class="top-bar"><span class="logo">Ranking</span><button class="btn btn-secondary btn-sm" onclick="history.back()">← Voltar</button></div><div class="screen" id="rank-body"></div>`;
+  state.unsubs.push(onSnapshot(query(collection(db,'players'),where('roomId','==',roomId)), snap=>{
+    const players = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.score||0)-(a.score||0));
+    const body = document.getElementById('rank-body');
+    if(body) body.innerHTML=`<div class="scroll-list">${renderRankList(players, players.length)}</div>`;
+  }));
+}
+
+// ─── PODIUM ───────────────────────────────────────────────────────────────────
+function renderPodium(app) {
+  const roomId = state.roomId;
+  app.innerHTML=`<div class="top-bar"><span class="logo">🏆 Pódio</span></div><div class="screen" id="podium-body"><div style="text-align:center;color:var(--muted)">Carregando...</div></div>`;
+  state.unsubs.push(onSnapshot(query(collection(db,'players'),where('roomId','==',roomId)), snap=>{
+    const players = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.score||0)-(a.score||0));
+    const [p1,p2,p3,...rest] = players;
+    const body = document.getElementById('podium-body');
+    if(!body) return;
+    body.innerHTML=`
+    <div style="text-align:center;margin-bottom:8px"><span class="badge badge-yellow">🎉 Fim de jogo!</span></div>
+    <div class="podium">
+      ${p2?`<div class="podium-col"><div class="podium-emoji">${p2.avatar}</div><div class="podium-name">${p2.nome}</div><div class="podium-score">${p2.score} pts</div><div class="podium-block p2">2</div></div>`:''}
+      ${p1?`<div class="podium-col"><div class="podium-emoji" style="font-size:48px">${p1.avatar}</div><div class="podium-name" style="font-weight:700">${p1.nome}</div><div class="podium-score">${p1.score} pts</div><div class="podium-block p1">1</div></div>`:''}
+      ${p3?`<div class="podium-col"><div class="podium-emoji">${p3.avatar}</div><div class="podium-name">${p3.nome}</div><div class="podium-score">${p3.score} pts</div><div class="podium-block p3">3</div></div>`:''}
+    </div>
+    ${rest.length?`<div class="card"><div class="card-title">Outros jogadores</div><div class="scroll-list">${renderRankList(rest.map((p,i)=>({...p,_rank:i+4})),rest.length,3)}</div></div>`:''}
+    <button class="btn btn-secondary" onclick="navigate('/room/${roomId}/ranking')">📊 Ver todos os resultados</button>
+    <button class="btn btn-secondary" onclick="navigate('/')">🏠 Início</button>`;
+  }));
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function renderRankList(players, max=10, offset=0) {
+  return players.slice(0,max).map((p,i)=>{
+    const rank = i+1+offset;
+    const medal = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':`${rank}`;
+    const cls = rank===1?'top1':rank===2?'top2':rank===3?'top3':'';
+    return `<div class="rank-item ${cls}">
+      <div class="rank-num">${medal}</div>
+      <div class="rank-avatar">${p.avatar||'🦊'}</div>
+      <div class="rank-name">${p.nome}</div>
+      <div class="rank-score">${p.score||0} pts</div>
+    </div>`;
+  }).join('');
+}
+
+// kick off
+window.navigate = navigate;
+handleRoute();
+</script>
+</body>
+</html>
