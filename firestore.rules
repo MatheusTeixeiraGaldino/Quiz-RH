@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Rooms — anyone authenticated can read/create/update
+    match /rooms/{roomId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if false;
+    }
+
+    // Questions — read/create only, no edit/delete after creation
+    match /questions/{questionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+
+    // Players — each user can only write their own player doc
+    match /players/{playerId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == playerId;
+      allow delete: if false;
+    }
+
+    // Answers — each user can only create their own answers, no edits
+    match /answers/{answerId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.resource.data.playerId == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}

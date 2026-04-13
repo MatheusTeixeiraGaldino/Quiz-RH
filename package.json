@@ -1,0 +1,32 @@
+{
+  "name": "quizlive",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0",
+    "firebase": "^10.12.0",
+    "qrcode": "^1.5.4",
+    "canvas-confetti": "^1.9.3",
+    "framer-motion": "^11.3.0",
+    "react-hot-toast": "^2.4.1",
+    "react-icons": "^5.2.1",
+    "zustand": "^4.5.4",
+    "immer": "^10.1.1",
+    "react-use": "^17.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.3.4",
+    "tailwindcss": "^3.4.7",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.40"
+  }
+}
