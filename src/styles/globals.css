@@ -2,461 +2,171 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Fredoka+One&display=swap');
 
 :root {
-  /* Kahoot brand colors */
-  --kahoot-purple: #46178f;
-  --kahoot-purple-dark: #2d0a6b;
-  --kahoot-purple-light: #7c48c8;
-  --kahoot-red: #e21b3c;
-  --kahoot-blue: #1368ce;
-  --kahoot-yellow: #d89e00;
-  --kahoot-green: #26890c;
-  --kahoot-red-bg: #e21b3c;
-  --kahoot-blue-bg: #1368ce;
-  --kahoot-yellow-bg: #d89e00;
-  --kahoot-green-bg: #26890c;
-  --kahoot-bg: #46178f;
-  --kahoot-game-bg: #081632;
-  --text: #ffffff;
-  --text2: #ffffffcc;
-  --muted: #ffffff88;
-  --surface: rgba(255,255,255,0.08);
-  --surface2: rgba(255,255,255,0.12);
-  --border: rgba(255,255,255,0.15);
-  --r: 8px;
-  --r-sm: 6px;
+  --bg:#f0f4ff; --bg2:#e8edff;
+  --surface:#ffffff; --surface2:#f5f7ff;
+  --border:#dde3ff; --border2:#c5ceff;
+  --pink:#ff4d8d; --purple:#8b5cf6; --blue:#3b82f6;
+  --cyan:#06b6d4; --yellow:#f59e0b; --green:#10b981;
+  --orange:#f97316; --red:#ef4444;
+  --opt1:#ff4d8d; --opt2:#3b82f6; --opt3:#f59e0b; --opt4:#10b981; --opt5:#8b5cf6; --opt6:#f97316;
+  --opt1s:#c0245e; --opt2s:#1d4ed8; --opt3s:#b45309; --opt4s:#047857; --opt5s:#5b21b6; --opt6s:#c2410c;
+  --text:#1e1b4b; --text2:#4338ca; --muted:#6b7280;
+  --r:16px; --r-sm:12px; --r-xs:8px;
 }
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{font-family:'Nunito',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;line-height:1.5}
+h1,h2,h3,h4{font-family:'Fredoka One','Nunito',cursive;letter-spacing:.3px}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
 
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-html { scroll-behavior: smooth; }
-body {
-  font-family: 'Montserrat', 'Space Grotesk', system-ui, sans-serif;
-  background: var(--kahoot-bg);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-  line-height: 1.5;
-}
-
-h1,h2,h3,h4 { font-family: 'Montserrat', 'Clash Display', system-ui, sans-serif; }
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 99px; }
-
-/* ── Kahoot logo font fallback ── */
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+@keyframes slideUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideRight{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+@keyframes bounceIn{0%{transform:scale(0);opacity:0}60%{transform:scale(1.18)}80%{transform:scale(.96)}100%{transform:scale(1);opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.06)}100%{transform:scale(1)}}
+@keyframes timerWarn{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 @layer components {
+  .screen{width:100%;max-width:680px;margin:0 auto;padding:18px 16px 48px;display:flex;flex-direction:column;gap:14px;animation:slideUp .3s cubic-bezier(.22,1,.36,1)}
 
-  /* ── LAYOUT ── */
-  .screen {
-    width: 100%; max-width: 700px; margin: 0 auto;
-    padding: 16px 14px 40px;
-    display: flex; flex-direction: column; gap: 12px;
-    animation: slideUp .3s cubic-bezier(.22,1,.36,1);
-  }
-  .screen.full { max-width: 100%; padding: 0; }
+  .topbar{position:sticky;top:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:rgba(240,244,255,.93);backdrop-filter:blur(16px);border-bottom:2px solid var(--border);width:100%}
+  .app-logo{font-family:'Fredoka One',cursive;font-size:24px;background:linear-gradient(135deg,var(--pink),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 
-  /* ── KAHOOT HEADER BAR ── */
-  .k-topbar {
-    background: var(--kahoot-purple-dark);
-    border-bottom: 3px solid rgba(0,0,0,0.2);
-    padding: 0 20px;
-    height: 56px;
-    display: flex; align-items: center; justify-content: space-between;
-    position: sticky; top: 0; z-index: 200;
-    width: 100%;
-  }
-  .k-logo {
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 900; font-size: 22px;
-    color: #fff;
-    letter-spacing: -0.5px;
-  }
-  .k-logo span { color: #ffdb00; }
+  .card{background:var(--surface);border:2px solid var(--border);border-radius:var(--r);padding:20px;transition:border-color .2s}
+  .card:hover{border-color:var(--border2)}
+  .card-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px}
 
-  /* ── CARD ── */
-  .card {
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: var(--r);
-    padding: 20px;
-  }
-  .card-white {
-    background: #fff;
-    border-radius: var(--r);
-    padding: 20px;
-    color: #1a1a2e;
-  }
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 22px;border-radius:var(--r-sm);font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;border:none;transition:all .15s cubic-bezier(.22,1,.36,1);text-decoration:none;width:100%;position:relative}
+  .btn-primary{background:linear-gradient(135deg,var(--purple),#6d28d9);color:#fff;box-shadow:0 5px 0 #4c1d95}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 7px 0 #4c1d95}
+  .btn-primary:active{transform:translateY(3px);box-shadow:0 2px 0 #4c1d95}
+  .btn-pink{background:linear-gradient(135deg,var(--pink),#e0004d);color:#fff;box-shadow:0 5px 0 #9d0235}
+  .btn-pink:hover{transform:translateY(-2px)}
+  .btn-pink:active{transform:translateY(3px);box-shadow:0 2px 0 #9d0235}
+  .btn-secondary{background:var(--surface);color:var(--text);border:2px solid var(--border2)}
+  .btn-secondary:hover{border-color:var(--purple);color:var(--purple);background:var(--surface2)}
+  .btn-success{background:linear-gradient(135deg,var(--green),#047857);color:#fff;box-shadow:0 4px 0 #065f46}
+  .btn-danger{background:linear-gradient(135deg,var(--red),#b91c1c);color:#fff;box-shadow:0 4px 0 #7f1d1d}
+  .btn-white{background:#fff;color:var(--purple);box-shadow:0 5px 0 rgba(0,0,0,.15);font-weight:900}
+  .btn-white:hover{transform:translateY(-2px)}
+  .btn-white:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(0,0,0,.15)}
+  .btn-ghost{background:transparent;color:var(--muted);border:none;width:auto}
+  .btn-ghost:hover{color:var(--text)}
+  .btn-sm{padding:8px 16px;font-size:13px;width:auto}
+  .btn-xs{padding:5px 12px;font-size:12px;width:auto;border-radius:var(--r-xs)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
 
-  /* ── BUTTONS ── */
-  .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    padding: 14px 24px; border-radius: var(--r);
-    font-family: 'Montserrat', sans-serif;
-    font-size: 16px; font-weight: 700;
-    cursor: pointer; border: none;
-    transition: all .15s ease;
-    text-decoration: none; width: 100%;
-    position: relative; text-transform: uppercase; letter-spacing: 0.5px;
-  }
-  /* Kahoot primary = white button */
-  .btn-primary {
-    background: #fff;
-    color: var(--kahoot-purple);
-    box-shadow: 0 4px 0 rgba(0,0,0,0.3);
-  }
-  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 0 rgba(0,0,0,0.3); }
-  .btn-primary:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.3); }
+  .inp{background:var(--surface2);border:2px solid var(--border2);border-radius:var(--r-xs);color:var(--text);font-family:'Nunito',sans-serif;font-size:15px;font-weight:600;padding:11px 14px;width:100%;transition:all .18s;outline:none}
+  .inp:focus{border-color:var(--purple);background:#fff;box-shadow:0 0 0 3px rgba(139,92,246,.15)}
+  .inp::placeholder{color:var(--muted);font-weight:600}
+  textarea.inp{resize:vertical;min-height:68px}
+  select.inp{cursor:pointer}
+  select.inp option{background:#fff;color:var(--text)}
 
-  /* Kahoot ghost = outline white */
-  .btn-secondary {
-    background: transparent;
-    color: #fff;
-    border: 2px solid rgba(255,255,255,0.5);
-  }
-  .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:800}
+  .badge-purple{background:rgba(139,92,246,.12);color:var(--purple);border:1.5px solid rgba(139,92,246,.3)}
+  .badge-pink{background:rgba(255,77,141,.12);color:var(--pink);border:1.5px solid rgba(255,77,141,.3)}
+  .badge-green{background:rgba(16,185,129,.12);color:var(--green);border:1.5px solid rgba(16,185,129,.3)}
+  .badge-yellow{background:rgba(245,158,11,.12);color:#b45309;border:1.5px solid rgba(245,158,11,.3)}
+  .badge-blue{background:rgba(59,130,246,.12);color:var(--blue);border:1.5px solid rgba(59,130,246,.3)}
+  .badge-red{background:rgba(239,68,68,.12);color:var(--red);border:1.5px solid rgba(239,68,68,.3)}
 
-  /* Kahoot action = purple filled */
-  .btn-purple {
-    background: var(--kahoot-purple-light);
-    color: #fff;
-    box-shadow: 0 4px 0 rgba(0,0,0,0.3);
-  }
-  .btn-purple:hover { transform: translateY(-2px); }
-  .btn-purple:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.3); }
+  .spinner{width:40px;height:40px;border-radius:50%;border:4px solid var(--border2);border-top-color:var(--purple);animation:spin .8s linear infinite;margin:0 auto}
+  .spinner-sm{width:20px;height:20px;border-width:3px}
 
-  .btn-danger { background: var(--kahoot-red); color: #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.3); }
-  .btn-success { background: var(--kahoot-green); color: #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.3); }
-  .btn-sm { padding: 8px 16px; font-size: 13px; width: auto; letter-spacing: 0.3px; }
-  .btn-xs { padding: 5px 12px; font-size: 12px; width: auto; }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+  .av-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  .av{aspect-ratio:1;border-radius:50%;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--surface2);border:2px solid var(--border);transition:all .2s}
+  .av:hover{border-color:var(--purple);transform:scale(1.1)}
+  .av.sel{border-color:var(--purple);background:rgba(139,92,246,.12);transform:scale(1.12);box-shadow:0 0 0 3px rgba(139,92,246,.2)}
 
-  /* ── INPUTS ── */
-  .inp {
-    background: rgba(255,255,255,0.15);
-    border: 2px solid rgba(255,255,255,0.3);
-    border-radius: var(--r-sm);
-    color: #fff;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 16px; font-weight: 500;
-    padding: 12px 16px; width: 100%;
-    transition: all .18s; outline: none;
-  }
-  .inp:focus { border-color: #fff; background: rgba(255,255,255,0.2); }
-  .inp::placeholder { color: rgba(255,255,255,0.5); }
-  .inp-dark {
-    background: #f2f2f2; border: 2px solid #e0e0e0;
-    color: #1a1a2e; border-radius: var(--r-sm);
-    font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 500;
-    padding: 12px 16px; width: 100%; transition: all .18s; outline: none;
-  }
-  .inp-dark:focus { border-color: var(--kahoot-purple); }
+  /* Game option buttons */
+  .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .opt-btn{border:none;border-radius:var(--r);cursor:pointer;color:#fff;font-family:'Nunito',sans-serif;font-weight:800;font-size:15px;transition:all .15s;display:flex;align-items:stretch;min-height:76px;width:100%;overflow:hidden;text-align:left;line-height:1.3}
+  .opt-btn:hover:not(:disabled){transform:translateY(-3px);filter:brightness(1.06)}
+  .opt-btn:active:not(:disabled){transform:translateY(2px)}
+  .opt-btn:disabled{cursor:default}
+  .opt-icon{width:48px;display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(0,0,0,.15);flex-shrink:0;min-height:76px}
+  .opt-text{flex:1;display:flex;align-items:center;padding:10px 12px}
+  .opt-1{background:var(--opt1);box-shadow:0 6px 0 var(--opt1s)}
+  .opt-2{background:var(--opt2);box-shadow:0 6px 0 var(--opt2s)}
+  .opt-3{background:var(--opt3);box-shadow:0 6px 0 var(--opt3s)}
+  .opt-4{background:var(--opt4);box-shadow:0 6px 0 var(--opt4s)}
+  .opt-5{background:var(--opt5);box-shadow:0 6px 0 var(--opt5s)}
+  .opt-6{background:var(--opt6);box-shadow:0 6px 0 var(--opt6s)}
+  .opt-btn.correct{background:#22c55e!important;box-shadow:0 6px 0 #15803d!important;animation:pop .4s ease}
+  .opt-btn.wrong{background:#6b7280!important;box-shadow:0 6px 0 #374151!important;opacity:.65}
+  .opt-btn.wrong-my{background:#ef4444!important;box-shadow:0 6px 0 #991b1b!important}
 
-  /* ── KAHOOT ANSWER OPTIONS ── */
-  /* The 4 iconic colored boxes */
-  .opt-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  .opt-btn {
-    position: relative;
-    padding: 0;
-    border-radius: var(--r);
-    border: none;
-    cursor: pointer;
-    transition: all .15s ease;
-    overflow: hidden;
-    min-height: 80px;
-    box-shadow: 0 6px 0 rgba(0,0,0,0.35);
-    display: flex; align-items: center;
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 700; font-size: 15px;
-    color: #fff;
-    text-align: left;
-    width: 100%;
-  }
-  .opt-btn:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 9px 0 rgba(0,0,0,0.35); }
-  .opt-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0,0,0,0.35); }
-  .opt-btn:disabled { cursor: default; }
+  /* Timer */
+  .timer-circle{width:68px;height:68px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-family:'Fredoka One',cursive;font-size:26px;color:var(--purple);box-shadow:0 4px 0 rgba(0,0,0,.12);transition:color .3s;flex-shrink:0}
+  .timer-circle.warn{color:var(--red);animation:timerWarn .5s ease infinite}
+  .timer-bar-wrap{height:10px;background:rgba(255,255,255,.25);border-radius:99px;overflow:hidden;flex:1}
+  .timer-bar{height:100%;background:#fff;border-radius:99px;transition:width 1s linear}
+  .timer-bar.warn{background:var(--red)}
 
-  .opt-btn .opt-icon {
-    width: 52px; height: 100%; min-height: 80px;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.15); flex-shrink: 0;
-    font-size: 22px;
-  }
-  .opt-btn .opt-text {
-    flex: 1; padding: 12px 14px;
-    line-height: 1.3;
-  }
+  /* Question card */
+  .q-card{background:#fff;border-radius:var(--r);padding:20px;text-align:center;box-shadow:0 4px 0 rgba(139,92,246,.2)}
+  .q-card img{width:100%;max-height:220px;object-fit:contain;border-radius:var(--r-xs);margin-bottom:12px;background:#f5f7ff}
+  .q-text{font-family:'Nunito',sans-serif;font-weight:800;font-size:18px;color:var(--text);line-height:1.4}
 
-  /* Kahoot 4 colors */
-  .opt-red   { background: #e21b3c; }
-  .opt-blue  { background: #1368ce; }
-  .opt-yellow{ background: #d89e00; }
-  .opt-green { background: #26890c; }
+  .progress-wrap{height:7px;background:rgba(255,255,255,.25);border-radius:99px;overflow:hidden}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--pink),var(--purple));border-radius:99px;transition:width .4s}
 
-  /* After answering */
-  .opt-btn.correct {
-    background: #2ecc71 !important;
-    box-shadow: 0 6px 0 #1a8a47 !important;
-    animation: correctPulse .4s ease;
-  }
-  .opt-btn.wrong {
-    background: #555 !important;
-    box-shadow: 0 6px 0 #333 !important;
-    opacity: 0.7;
-  }
-  .opt-btn.wrong-my {
-    background: #e74c3c !important;
-    box-shadow: 0 6px 0 #a93226 !important;
-  }
+  .rank-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.18);border-radius:var(--r-sm);animation:slideRight .3s ease both}
+  .rank-item.me{background:rgba(255,219,0,.15);border-color:#fbbf24}
+  .rank-item.r1{background:rgba(255,219,0,.18);border-color:#fbbf24}
+  .rank-item.r2{background:rgba(209,213,219,.12);border-color:#9ca3af}
+  .rank-item.r3{background:rgba(180,100,30,.12);border-color:#d97706}
+  .rank-num{font-family:'Fredoka One',cursive;font-size:18px;min-width:34px;text-align:center;color:#fff}
+  .rank-score{font-family:'Fredoka One',cursive;font-size:18px;color:#fbbf24;white-space:nowrap}
 
-  @keyframes correctPulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-  }
+  .game-bg{min-height:100vh;background:linear-gradient(160deg,#4f46e5 0%,#7c3aed 50%,#db2777 100%)}
+  .feedback-ok{min-height:100vh;background:linear-gradient(160deg,#059669,#047857)}
+  .feedback-ko{min-height:100vh;background:linear-gradient(160deg,#dc2626,#991b1b)}
 
-  /* ── KAHOOT TIMER ── */
-  .k-timer-wrap {
-    display: flex; flex-direction: column; align-items: center;
-    gap: 8px;
-  }
-  .k-timer-circle {
-    width: 72px; height: 72px; border-radius: 50%;
-    background: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 900; font-size: 28px;
-    color: var(--kahoot-purple);
-    box-shadow: 0 4px 0 rgba(0,0,0,0.3);
-    transition: color .3s;
-  }
-  .k-timer-circle.warn { color: var(--kahoot-red); animation: timerPulse .5s ease infinite; }
-  @keyframes timerPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+  .chip{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:99px;font-size:13px;font-weight:800;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.2);color:#fff;animation:scaleIn .2s ease}
+  .qr-wrap{background:#fff;border-radius:var(--r);padding:12px;display:inline-block;margin:0 auto;box-shadow:0 6px 0 rgba(0,0,0,.1)}
 
-  .k-timer-bar-wrap {
-    width: 100%; height: 12px;
-    background: rgba(255,255,255,0.2);
-    border-radius: 99px; overflow: hidden;
-  }
-  .k-timer-bar {
-    height: 100%;
-    background: #fff;
-    border-radius: 99px;
-    transition: width 1s linear, background .3s;
-  }
-  .k-timer-bar.warn { background: var(--kahoot-red); }
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#1e1b4b;color:#fff;border-radius:var(--r-sm);padding:12px 24px;font-size:14px;font-weight:700;transition:transform .3s cubic-bezier(.22,1,.36,1);z-index:9998;pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.3);max-width:90vw}
+  #toast.show{transform:translateX(-50%) translateY(0)}
 
-  /* ── QUESTION CARD ── */
-  .k-question {
-    background: #fff;
-    border-radius: var(--r);
-    padding: 24px 20px;
-    text-align: center;
-    min-height: 100px;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 0 rgba(0,0,0,0.25);
-  }
-  .k-question-text {
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 700; font-size: 20px;
-    color: #1a1a2e; line-height: 1.35;
-  }
+  .podium{display:flex;align-items:flex-end;justify-content:center;gap:8px;padding:16px 0 0}
+  .pod-col{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .pod-block{border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:center;font-family:'Fredoka One',cursive;font-size:26px;animation:scaleIn .5s ease both}
+  .pod-p1{width:90px;height:100px;background:linear-gradient(180deg,#fde68a,#f59e0b);color:#78350f;animation-delay:.1s;box-shadow:0 -4px 16px rgba(245,158,11,.35)}
+  .pod-p2{width:76px;height:74px;background:linear-gradient(180deg,#e5e7eb,#9ca3af);color:#374151;animation-delay:.2s}
+  .pod-p3{width:76px;height:56px;background:linear-gradient(180deg,#d97706,#92400e);animation-delay:.3s}
 
-  /* ── PROGRESS BAR (top) ── */
-  .k-progress {
-    height: 6px;
-    background: rgba(255,255,255,0.2);
-    border-radius: 99px; overflow: hidden;
-  }
-  .k-progress-fill {
-    height: 100%;
-    background: #ffdb00;
-    border-radius: 99px;
-    transition: width .4s ease;
-  }
+  .score-box{text-align:center;padding:14px;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.2);border-radius:var(--r-sm)}
+  .score-num{font-family:'Fredoka One',cursive;font-size:38px;color:#fbbf24}
 
-  /* ── POINTS POPUP ── */
-  .k-points-popup {
-    text-align: center;
-    padding: 28px 20px;
-    animation: slideUp .4s cubic-bezier(.22,1,.36,1);
-  }
-  .k-correct-icon { font-size: 64px; margin-bottom: 8px; animation: bounceIn .5s ease; }
-  .k-pts-label { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 1px; }
-  .k-pts-num {
-    font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 56px;
-    color: #ffdb00;
-    text-shadow: 0 4px 0 rgba(0,0,0,0.2);
-    line-height: 1;
-  }
-  .k-streak { font-size: 14px; font-weight: 700; color: #ffdb00; margin-top: 4px; }
+  .pin-input{font-family:'Fredoka One',cursive;font-size:28px;letter-spacing:6px;text-align:center;background:#f5f3ff;border:2px solid #ddd6fe;border-radius:var(--r-sm);padding:12px;width:100%;color:#4c1d95;outline:none;transition:border-color .18s;text-transform:uppercase}
+  .pin-input:focus{border-color:var(--purple);box-shadow:0 0 0 3px rgba(139,92,246,.15)}
 
-  /* ── RANKING ITEM ── */
-  .k-rank-item {
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 18px;
-    background: rgba(255,255,255,0.1);
-    border-radius: var(--r);
-    animation: slideRight .3s ease both;
-    border: 1px solid rgba(255,255,255,0.1);
-  }
-  .k-rank-item.me {
-    background: rgba(255,219,0,0.15);
-    border-color: #ffdb00;
-  }
-  .k-rank-item.r1 { background: rgba(255,219,0,0.2); border-color: #ffdb00; }
-  .k-rank-item.r2 { background: rgba(192,192,192,0.15); border-color: #c0c0c0; }
-  .k-rank-item.r3 { background: rgba(205,127,50,0.15); border-color: #cd7f32; }
+  /* CRITICAL: question builder readable */
+  .q-builder-inner{background:#f5f3ff;border:2px solid #ddd6fe;border-radius:var(--r-sm);padding:16px}
+  .q-builder-inner .lbl,.q-builder-inner label{color:#4c1d95!important;font-weight:800}
+  .q-builder-inner input,.q-builder-inner textarea,.q-builder-inner select{background:#fff!important;color:#1e1b4b!important;border-color:#c4b5fd!important;font-weight:700}
+  .q-builder-inner input::placeholder,.q-builder-inner textarea::placeholder{color:#a78bfa!important}
+  .q-builder-inner .btn-success,.q-builder-inner .btn-secondary{color:#fff!important}
+  .q-builder-inner .btn-secondary{color:var(--text)!important}
 
-  .k-rank-pos {
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 900; font-size: 18px;
-    min-width: 36px; text-align: center;
-  }
-  .k-rank-score {
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 800; font-size: 18px;
-    color: #ffdb00; white-space: nowrap;
-  }
-
-  /* ── BADGES ── */
-  .badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 4px 12px; border-radius: 99px;
-    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-  }
-  .badge-white { background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); }
-  .badge-yellow { background: rgba(255,219,0,0.2); color: #ffdb00; border: 1px solid rgba(255,219,0,0.4); }
-  .badge-green { background: rgba(46,204,113,0.2); color: #2ecc71; border: 1px solid rgba(46,204,113,0.4); }
-  .badge-red { background: rgba(226,27,60,0.2); color: #ff6b6b; border: 1px solid rgba(226,27,60,0.4); }
-
-  /* ── SPINNER ── */
-  .spinner {
-    width: 40px; height: 40px; border-radius: 50%;
-    border: 4px solid rgba(255,255,255,0.2);
-    border-top-color: #fff;
-    animation: spin .8s linear infinite; margin: 0 auto;
-  }
-
-  /* ── AVATAR ── */
-  .av-grid { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; }
-  .av {
-    aspect-ratio: 1; border-radius: 50%; font-size: 24px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; background: rgba(255,255,255,0.1);
-    border: 3px solid transparent;
-    transition: all .2s;
-  }
-  .av:hover { border-color: rgba(255,255,255,0.5); transform: scale(1.1); }
-  .av.sel {
-    border-color: #ffdb00;
-    background: rgba(255,219,0,0.2);
-    transform: scale(1.15);
-    box-shadow: 0 0 0 4px rgba(255,219,0,0.2);
-  }
-
-  /* ── PODIUM ── */
-  .podium { display: flex; align-items: flex-end; justify-content: center; gap: 8px; padding: 16px 0 0; }
-  .pod-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  .pod-block {
-    border-radius: 6px 6px 0 0;
-    display: flex; align-items: center; justify-content: center;
-    font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 28px;
-    animation: scaleIn .5s ease both;
-  }
-  .pod-p1 { width: 96px; height: 110px; background: linear-gradient(180deg,#ffd700,#ffb300); color: #1a1000; animation-delay:.1s; box-shadow: 0 -4px 20px rgba(255,219,0,.4); }
-  .pod-p2 { width: 80px; height: 80px; background: linear-gradient(180deg,#e0e0e0,#aaaaaa); color: #1a1a1a; animation-delay:.2s; }
-  .pod-p3 { width: 80px; height: 64px; background: linear-gradient(180deg,#cd853f,#8B4513); color: #1a0800; animation-delay:.3s; }
-  .pod-emoji { font-size: 40px; animation: bounceIn .6s ease both; }
-  .pod-emoji.big { font-size: 56px; animation-delay:.1s; }
-
-  /* ── WAIT SCREEN - KAHOOT LOBBY ── */
-  .k-lobby {
-    min-height: 100vh;
-    background: var(--kahoot-purple-dark);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    text-align: center; padding: 24px;
-  }
-  .k-pin-box {
-    background: #fff; border-radius: var(--r);
-    padding: 20px 40px; margin-bottom: 20px;
-    box-shadow: 0 8px 0 rgba(0,0,0,0.25);
-  }
-  .k-pin-label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #555; }
-  .k-pin-num { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 42px; color: #1a1a2e; letter-spacing: 4px; }
-
-  /* ── GAME BACKGROUND ── */
-  .k-game-bg {
-    min-height: 100vh;
-    background: linear-gradient(180deg, var(--kahoot-purple) 0%, var(--kahoot-purple-dark) 100%);
-  }
-
-  /* ── ANSWER BAR ── */
-  .k-ans-bar { display: flex; flex-direction: column; gap: 4px; }
-  .k-ans-row { display: flex; align-items: center; gap: 8px; }
-  .k-ans-fill-wrap { flex: 1; height: 24px; background: rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden; }
-  .k-ans-fill { height: 100%; border-radius: 4px; transition: width .5s ease; min-width: 4px; }
-
-  /* ── CHIP ── */
-  .chip {
-    display: flex; align-items: center; gap: 6px;
-    padding: 6px 14px; background: rgba(255,255,255,0.15);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 99px; font-size: 13px; font-weight: 600;
-    animation: scaleIn .25s ease;
-  }
-
-  /* ── QR WRAP ── */
-  .qr-wrap {
-    background: #fff; border-radius: var(--r);
-    padding: 12px; display: inline-block; margin: 0 auto;
-    box-shadow: 0 6px 0 rgba(0,0,0,0.25);
-  }
-
-  /* ── TOAST ── */
-  #toast {
-    position: fixed; bottom: 24px; left: 50%;
-    transform: translateX(-50%) translateY(80px);
-    background: #333; color: #fff;
-    border-radius: var(--r); padding: 12px 24px;
-    font-size: 14px; font-weight: 600;
-    transition: transform .3s cubic-bezier(.22,1,.36,1);
-    z-index: 9998; pointer-events: none;
-    white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,.5);
-    max-width: 90vw;
-  }
-  #toast.show { transform: translateX(-50%) translateY(0); }
-
-  /* ── SCORE BOX ── */
-  .score-box {
-    text-align: center; padding: 16px;
-    background: rgba(255,255,255,0.1);
-    border-radius: var(--r); border: 1px solid rgba(255,255,255,0.15);
-  }
-  .score-num {
-    font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 40px;
-    color: #ffdb00;
-  }
+  .correct-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;cursor:pointer;flex-shrink:0;transition:all .2s;border:2px solid}
+  .divider-text{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;font-weight:700}
+  .divider-text::before,.divider-text::after{content:'';flex:1;height:2px;background:var(--border);border-radius:99px}
+  .scroll-list{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;padding-right:4px}
+  .scroll-list::-webkit-scrollbar{width:4px}
+  .q-item{display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-sm);animation:fadeIn .3s ease}
 }
 
-/* ── ANIMATIONS ── */
-@keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-@keyframes slideRight { from{opacity:0;transform:translateX(-16px)} to{opacity:1;transform:translateX(0)} }
-@keyframes scaleIn { from{opacity:0;transform:scale(.9)} to{opacity:1;transform:scale(1)} }
-@keyframes bounceIn { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.2)} 80%{transform:scale(.95)} 100%{transform:scale(1);opacity:1} }
-@keyframes spin { to{transform:rotate(360deg)} }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px}
 
-@media(max-width:400px) {
-  .opt-grid { grid-template-columns: 1fr; }
-  .k-question-text { font-size: 17px; }
-}
+@media(max-width:400px){.opt-grid{grid-template-columns:1fr}.q-text{font-size:15px}}

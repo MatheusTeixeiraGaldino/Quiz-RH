@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { doc, onSnapshot, query, collection, where } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -9,9 +9,9 @@ export default function PlayerWait() {
   const navigate = useNavigate()
   const playerName = useStore(s => s.playerName)
   const playerAvatar = useStore(s => s.playerAvatar)
-  const [playerCount, setPlayerCount] = React.useState(0)
-  const [players, setPlayers] = React.useState([])
-  const [roomName, setRoomName] = React.useState('')
+  const [count, setCount] = useState(0)
+  const [players, setPlayers] = useState([])
+  const [roomName, setRoomName] = useState('')
 
   useEffect(() => {
     const u = onSnapshot(doc(db, 'rooms', roomId), s => {
@@ -25,79 +25,43 @@ export default function PlayerWait() {
 
   useEffect(() => {
     const u = onSnapshot(query(collection(db, 'players'), where('roomId', '==', roomId)), s => {
-      setPlayerCount(s.size)
+      setCount(s.size)
       setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() })))
     })
     return u
   }, [roomId])
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #46178f 0%, #2d0a6b 100%)', display: 'flex', flexDirection: 'column' }}>
-
-      {/* Top: room info */}
-      <div style={{ background: 'rgba(0,0,0,0.2)', padding: '16px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
-          Sala
-        </div>
-        <div style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 900, fontSize: 22, color: '#fff' }}>
-          {roomName || roomId}
-        </div>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#fce7f3,#ede9fe,#dbeafe)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'rgba(255,255,255,.6)', padding: '12px 20px', textAlign: 'center', backdropFilter: 'blur(12px)', borderBottom: '2px solid #dde3ff' }}>
+        <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 22, background: 'linear-gradient(135deg,#ff4d8d,#8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>OL Quiz! ⚡</span>
       </div>
-
-      {/* PIN box */}
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 16px 0' }}>
-        <div className="k-pin-box">
-          <div className="k-pin-label">PIN do jogo</div>
-          <div className="k-pin-num">{roomId.slice(0, 20)}</div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', gap: 16, textAlign: 'center' }}>
+        {/* PIN */}
+        <div style={{ background: '#fff', borderRadius: 16, padding: '14px 32px', boxShadow: '0 6px 0 rgba(139,92,246,.2)' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: '#8b5cf6', marginBottom: 4 }}>PIN do jogo</div>
+          <div style={{ fontFamily: "'Fredoka One',cursive", fontSize: 36, color: '#4c1d95', letterSpacing: 4 }}>{roomId}</div>
         </div>
-      </div>
-
-      {/* Player avatar + name */}
-      <div style={{ textAlign: 'center', padding: '16px 16px 8px' }}>
-        <div style={{ fontSize: 56, marginBottom: 8, animation: 'float 3s ease-in-out infinite' }}>{playerAvatar || '🦊'}</div>
-        <div style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 900, fontSize: 24, color: '#fff' }}>
-          {playerName || 'Jogador'}
+        {/* Avatar */}
+        <div style={{ fontSize: 64, animation: 'float 3s ease-in-out infinite' }}>{playerAvatar || '🦊'}</div>
+        <h2 style={{ fontFamily: "'Fredoka One',cursive", fontSize: 24, color: '#1e1b4b' }}>{playerName || 'Jogador'}</h2>
+        <p style={{ color: '#8b5cf6', fontWeight: 700, fontSize: 15 }}>Você está na sala! 🎉</p>
+        {/* Dots */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[0,1,2].map(i => <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: '#8b5cf6', animation: `pulse 1.2s ease-in-out ${i*.2}s infinite` }} />)}
         </div>
-        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginTop: 4 }}>
-          Você está na sala! 🎉
+        <div style={{ background: 'rgba(139,92,246,.1)', border: '2px solid rgba(139,92,246,.2)', borderRadius: 99, padding: '6px 18px', fontWeight: 800, color: '#5b21b6', fontSize: 14 }}>
+          👥 {count} jogador{count !== 1 ? 'es' : ''} na sala
         </div>
-      </div>
-
-      {/* Players joined */}
-      <div style={{ flex: 1, padding: '12px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.1)', borderRadius: 99,
-            padding: '8px 20px', border: '1px solid rgba(255,255,255,0.2)',
-          }}>
-            <span style={{ fontSize: 18 }}>👥</span>
-            <span style={{ fontWeight: 700, fontSize: 16 }}>{playerCount} jogador{playerCount !== 1 ? 'es' : ''} na sala</span>
-          </div>
-        </div>
-
-        {/* Animated dots loader */}
-        <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: 500 }}>
-          Aguardando o host iniciar…
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{
-              width: 10, height: 10, borderRadius: '50%', background: '#ffdb00',
-              animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-            }} />
-          ))}
-        </div>
-
-        {/* Players grid */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxHeight: 200, overflow: 'hidden' }}>
+        {/* Players chips */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 400 }}>
           {players.map(p => (
-            <div key={p.id} className="chip" style={{ animation: 'scaleIn .25s ease' }}>
-              <span>{p.avatar}</span>
-              <span style={{ fontWeight: 700 }}>{p.nome}</span>
+            <div key={p.id} style={{ background: '#fff', borderRadius: 99, padding: '5px 14px', fontSize: 13, fontWeight: 800, color: '#4c1d95', boxShadow: '0 2px 0 rgba(139,92,246,.15)', animation: 'scaleIn .2s ease' }}>
+              {p.avatar} {p.nome}
             </div>
           ))}
         </div>
+        <p style={{ color: '#6b7280', fontWeight: 600, fontSize: 13, marginTop: 4 }}>Aguardando o host iniciar…</p>
       </div>
     </div>
   )

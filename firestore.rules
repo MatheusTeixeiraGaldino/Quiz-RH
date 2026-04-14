@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rooms — anyone authenticated can read/create/update
+    // Rooms — 5-char alphanumeric ID set by client
     match /rooms/{roomId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
@@ -10,26 +10,37 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Questions — read/create only, no edit/delete after creation
+    // Questions
     match /questions/{questionId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update, delete: if false;
     }
 
-    // Players — each user can only write their own player doc
+    // Players
     match /players/{playerId} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null && request.auth.uid == playerId;
       allow delete: if false;
     }
 
-    // Answers — each user can only create their own answers, no edits
+    // Answers
     match /answers/{answerId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null &&
         request.resource.data.playerId == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    // Templates — global ones readable by all, private only by owner
+    match /templates/{templateId} {
+      allow read: if request.auth != null &&
+        (resource.data.visibility == 'global' ||
+         resource.data.ownerUid == request.auth.uid);
+      allow create: if request.auth != null &&
+        request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null &&
+        resource.data.ownerUid == request.auth.uid;
     }
   }
 }

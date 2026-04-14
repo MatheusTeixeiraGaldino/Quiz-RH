@@ -1,9 +1,8 @@
 import React from 'react'
 
-// ── Kahoot TopBar ──────────────────────────────────────────────────────────
 export function TopBar({ left, right, center }) {
   return (
-    <div className="k-topbar">
+    <div className="topbar">
       <div className="flex items-center gap-2 min-w-[80px]">{left}</div>
       {center && <div className="flex-1 flex justify-center">{center}</div>}
       <div className="flex items-center gap-2 min-w-[80px] justify-end">{right}</div>
@@ -11,74 +10,39 @@ export function TopBar({ left, right, center }) {
   )
 }
 
-// ── Kahoot Logo ────────────────────────────────────────────────────────────
-export function Logo({ size = 'md' }) {
-  const sizes = { sm: 'text-xl', md: 'text-2xl', lg: 'text-4xl' }
+export function AppLogo({ size = 'md' }) {
+  const sz = { sm: '20px', md: '26px', lg: '36px' }[size]
   return (
-    <span className={`k-logo ${sizes[size]}`}>
-      kahoot<span>!</span>
-    </span>
+    <span className="app-logo" style={{ fontSize: sz }}>OL Quiz!</span>
   )
 }
 
-// ── Spinner ────────────────────────────────────────────────────────────────
 export function Spinner({ size = 40 }) {
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      border: '4px solid rgba(255,255,255,0.2)',
-      borderTopColor: '#fff',
-      animation: 'spin .8s linear infinite',
-      margin: '0 auto',
-    }} />
-  )
+  return <div style={{ width: size, height: size, borderRadius: '50%', border: '4px solid #dde3ff', borderTopColor: '#8b5cf6', animation: 'spin .8s linear infinite', margin: '0 auto' }} />
 }
 
-// ── Badge ──────────────────────────────────────────────────────────────────
-export function Badge({ children, variant = 'white', className = '' }) {
+export function Badge({ children, variant = 'purple', className = '' }) {
   return <span className={`badge badge-${variant} ${className}`}>{children}</span>
 }
 
-// ── Kahoot Rank Item ───────────────────────────────────────────────────────
-export function RankItem({ rank, player, isMe, delay = 0, showDelta }) {
+export function RankItem({ rank, player, isMe, delay = 0 }) {
   const medals = { 1: '🥇', 2: '🥈', 3: '🥉' }
   const cls = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : ''
   return (
-    <div className={`k-rank-item ${cls} ${isMe ? 'me' : ''}`} style={{ animationDelay: `${delay}ms` }}>
-      <div className="k-rank-pos">{medals[rank] || rank}</div>
-      <div style={{ fontSize: 28, lineHeight: 1 }}>{player.avatar || '🦊'}</div>
+    <div className={`rank-item ${cls} ${isMe ? 'me' : ''}`} style={{ animationDelay: `${delay}ms` }}>
+      <div className="rank-num">{medals[rank] || rank}</div>
+      <div style={{ fontSize: 26, lineHeight: 1 }}>{player.avatar || '🦊'}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+        <div style={{ fontWeight: 800, fontSize: 14, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', color: '#fff' }}>
           {player.nome}
           {isMe && <span className="badge badge-yellow ml-2" style={{ fontSize: 10 }}>você</span>}
         </div>
       </div>
-      <div className="k-rank-score">{(player.score || 0).toLocaleString('pt-BR')}</div>
+      <div className="rank-score">{(player.score || 0).toLocaleString('pt-BR')}</div>
     </div>
   )
 }
 
-// ── Timer Circle + Bar ─────────────────────────────────────────────────────
-export function KahootTimer({ value, max }) {
-  const pct = Math.max(0, Math.min(100, (value / max) * 100))
-  const warn = value <= 5
-  return (
-    <div className="k-timer-wrap">
-      <div className={`k-timer-circle ${warn ? 'warn' : ''}`}>{value}</div>
-      <div className="k-timer-bar-wrap" style={{ width: '100%' }}>
-        <div className={`k-timer-bar ${warn ? 'warn' : ''}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  )
-}
-
-// ── Answer option icons (Kahoot shapes) ────────────────────────────────────
-export const OPT_ICONS = ['▲', '◆', '●', '■', '★', '✦']
-export const OPT_COLORS_CSS = ['opt-red', 'opt-blue', 'opt-yellow', 'opt-green', 'opt-red', 'opt-blue']
-export const OPT_ICON_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
-export const LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
-
-// ── Avatar Grid ────────────────────────────────────────────────────────────
 const AVATARS = ['🦊','🐺','🐸','🦁','🐯','🐻','🐼','🐨','🦅','🦋',
                  '🐙','🦄','🐲','👾','🤖','🎃','🧸','🦖','🦑','🐬',
                  '🦝','🐮','🐷','🐧','🦜','🦩','🦚','🐉','🧟','🥷']
@@ -87,12 +51,22 @@ export function AvatarGrid({ selected, onSelect }) {
   return (
     <div className="av-grid">
       {AVATARS.map(a => (
-        <div key={a} className={`av ${a === selected ? 'sel' : ''}`} onClick={() => onSelect(a)}>
-          {a}
-        </div>
+        <div key={a} className={`av ${a === selected ? 'sel' : ''}`} onClick={() => onSelect(a)}>{a}</div>
       ))}
     </div>
   )
 }
 
+export const OPT_SHAPES = ['▲', '◆', '●', '■', '★', '✦']
+export const OPT_CLS    = ['opt-1','opt-2','opt-3','opt-4','opt-5','opt-6']
+export const LABELS     = ['A','B','C','D','E','F']
+export const OPT_COLORS = ['#ff4d8d','#3b82f6','#f59e0b','#10b981','#8b5cf6','#f97316']
 export { AVATARS }
+
+// Generate a 5-char alphanumeric room code
+export function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = ''
+  for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)]
+  return code
+}

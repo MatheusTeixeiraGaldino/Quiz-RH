@@ -1,192 +1,117 @@
 import React, { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage } from '../firebase'
+import { collection, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { db } from '../firebase'
 import { useStore } from '../store'
-import { TopBar, Logo, Badge } from '../components/UI'
+import { AppLogo, Badge, OPT_COLORS, LABELS, generateRoomCode } from '../components/UI'
 import toast from 'react-hot-toast'
 
-const LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
-const OPT_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c']
-const DEFAULT_Q = {
-  type: 'multiple', // 'multiple' | 'truefalse'
-  pergunta: '',
-  opcoes: ['', '', '', ''],
-  correta: 0,
-  pontuacao: 100,
-  tempo: 30,
-  imagem: '',
-}
+const DEFAULT_Q = { type: 'multiple', pergunta: '', opcoes: ['', '', '', ''], correta: 0, pontuacao: 100, tempo: 30, imagem: '' }
 
 function QuestionForm({ onSave, onCancel, initial }) {
-  const [q, setQ] = useState(initial || { ...DEFAULT_Q, opcoes: ['', '', '', ''] })
-  const [uploading, setUploading] = useState(false)
-  const fileRef = useRef()
-  const user = useStore(s => s.user)
+  const [q, setQ] = useState(initial ? { ...initial } : { ...DEFAULT_Q, opcoes: ['', '', '', ''] })
+  const setField = (k, v) => setQ(p => ({ ...p, [k]: v }))
+  const setOpt = (i, v) => setQ(p => { const o = [...p.opcoes]; o[i] = v; return { ...p, opcoes: o } })
+  const setType = (t) => setQ(p => ({ ...p, type: t, opcoes: t === 'truefalse' ? ['Verdadeiro', 'Falso'] : ['', '', '', ''], correta: 0 }))
 
-  const setField = (k, v) => setQ(prev => ({ ...prev, [k]: v }))
-  const setOpt = (i, v) => setQ(prev => {
-    const opcoes = [...prev.opcoes]
-    opcoes[i] = v
-    return { ...prev, opcoes }
-  })
-
-  const setType = (type) => {
-    if (type === 'truefalse') setQ(prev => ({ ...prev, type, opcoes: ['Verdadeiro', 'Falso'], correta: 0 }))
-    else setQ(prev => ({ ...prev, type, opcoes: ['', '', '', ''], correta: 0 }))
-  }
-
-  const addOpt = () => {
-    if (q.opcoes.length >= 6) return
-    setQ(prev => ({ ...prev, opcoes: [...prev.opcoes, ''] }))
-  }
-
+  const addOpt = () => { if (q.opcoes.length < 6) setQ(p => ({ ...p, opcoes: [...p.opcoes, ''] })) }
   const removeOpt = (i) => {
     if (q.opcoes.length <= 2) return
-    setQ(prev => {
-      const opcoes = prev.opcoes.filter((_, j) => j !== i)
-      const correta = prev.correta >= opcoes.length ? 0 : prev.correta === i ? 0 : prev.correta > i ? prev.correta - 1 : prev.correta
-      return { ...prev, opcoes, correta }
+    setQ(p => {
+      const opcoes = p.opcoes.filter((_, j) => j !== i)
+      const correta = p.correta >= opcoes.length ? 0 : p.correta === i ? 0 : p.correta > i ? p.correta - 1 : p.correta
+      return { ...p, opcoes, correta }
     })
   }
 
-  const handleImage = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    if (file.size > 5 * 1024 * 1024) { toast.error('Imagem muito grande (máx 5MB)'); return }
-    setUploading(true)
-    try {
-      const path = `questions/${user?.uid || 'anon'}/${Date.now()}_${file.name}`
-      const r = ref(storage, path)
-      await uploadBytes(r, file)
-      const url = await getDownloadURL(r)
-      setField('imagem', url)
-      toast.success('Imagem enviada!')
-    } catch (e) {
-      toast.error('Erro ao enviar imagem')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleSave = () => {
+  const save = () => {
     if (!q.pergunta.trim()) return toast.error('Digite o enunciado')
-    const filled = q.opcoes.filter(o => o.trim())
-    if (filled.length < 2) return toast.error('Adicione ao menos 2 opções')
-    if (!q.opcoes[q.correta]?.trim()) return toast.error('Marque uma opção correta')
+    if (q.opcoes.filter(o => o.trim()).length < 2) return toast.error('Ao menos 2 opções')
+    if (!q.opcoes[q.correta]?.trim()) return toast.error('Marque a opção correta')
     onSave({ ...q, opcoes: q.opcoes.map(o => o.trim()) })
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Type selector */}
-      <div className="flex gap-2">
-        {[['multiple', '🔢 Múltipla escolha'], ['truefalse', '✔ Verdadeiro/Falso']].map(([t, label]) => (
+    <div className="q-builder-inner">
+      {/* Type */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {[['multiple', '🔢 Múltipla'], ['truefalse', '✔ V/F']].map(([t, l]) => (
           <button key={t} onClick={() => setType(t)}
-            className={`btn flex-1 text-sm py-2 ${q.type === t ? 'btn-primary' : 'btn-secondary'}`}>
-            {label}
-          </button>
+            className={`btn btn-sm ${q.type === t ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ flex: 1 }}>{l}</button>
         ))}
       </div>
 
-      {/* Question text */}
-      <div>
-        <label className="block text-xs font-semibold uppercase tracking-widest text-[--muted] mb-2">Enunciado</label>
-        <textarea
-          value={q.pergunta}
-          onChange={e => setField('pergunta', e.target.value)}
-          placeholder="Digite a pergunta aqui…"
-          rows={2}
-          className="input-field resize-none"
-        />
+      {/* Question */}
+      <div style={{ marginBottom: 10 }}>
+        <label className="lbl">Enunciado</label>
+        <textarea value={q.pergunta} onChange={e => setField('pergunta', e.target.value)}
+          placeholder="Digite a pergunta aqui…" rows={2} className="inp" />
       </div>
 
-      {/* Image upload */}
-      <div>
-        <label className="block text-xs font-semibold uppercase tracking-widest text-[--muted] mb-2">Imagem (opcional)</label>
-        <div className="flex gap-2 items-center">
-          <input type="text" value={q.imagem} onChange={e => setField('imagem', e.target.value)}
-            placeholder="URL da imagem ou faça upload…" className="input-field flex-1 text-sm" />
-          <button onClick={() => fileRef.current?.click()} disabled={uploading}
-            className="btn btn-secondary text-sm py-2 px-3 whitespace-nowrap" style={{ width: 'auto' }}>
-            {uploading ? '⏳' : '📎 Upload'}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImage} />
-        </div>
+      {/* Image URL */}
+      <div style={{ marginBottom: 10 }}>
+        <label className="lbl">Imagem (URL — opcional)</label>
+        <input value={q.imagem || ''} onChange={e => setField('imagem', e.target.value)}
+          placeholder="https://…" className="inp" />
         {q.imagem && (
-          <div className="mt-2 relative">
-            <img src={q.imagem} alt="preview" className="w-full h-28 object-cover rounded-xl" />
+          <div style={{ position: 'relative', marginTop: 8 }}>
+            <img src={q.imagem} alt="preview"
+              style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 8, background: '#f5f3ff' }}
+              onError={e => e.target.style.display = 'none'} />
             <button onClick={() => setField('imagem', '')}
-              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 text-white text-xs flex items-center justify-center">×</button>
+              style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, cursor: 'pointer', fontWeight: 700 }}>×</button>
           </div>
         )}
       </div>
 
       {/* Options */}
-      <div>
-        <label className="block text-xs font-semibold uppercase tracking-widest text-[--muted] mb-2">
-          Opções <span style={{ color: 'var(--muted)', fontSize: '10px' }}>(marque o ✓ na correta)</span>
-        </label>
-        <div className="flex flex-col gap-2">
+      <div style={{ marginBottom: 10 }}>
+        <label className="lbl">Opções <span style={{ fontSize: 10, textTransform: 'none', color: '#a78bfa', fontWeight: 600 }}>(clique na letra para marcar a correta)</span></label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {q.opcoes.map((opt, i) => (
-            <div key={i} className="flex gap-2 items-center">
-              <button
-                onClick={() => setField('correta', i)}
-                className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold transition-all"
-                style={{
-                  background: q.correta === i ? OPT_COLORS[i] : 'var(--surface3)',
-                  color: q.correta === i ? '#fff' : OPT_COLORS[i],
-                  border: `2px solid ${OPT_COLORS[i]}`,
-                }}>
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={() => setField('correta', i)} className="correct-dot"
+                style={{ borderColor: OPT_COLORS[i], background: q.correta === i ? OPT_COLORS[i] : 'transparent', color: q.correta === i ? '#fff' : OPT_COLORS[i] }}>
                 {LABELS[i]}
               </button>
-              <input
-                value={opt}
-                onChange={e => setOpt(i, e.target.value)}
-                placeholder={`Opção ${LABELS[i]}…`}
-                className="input-field flex-1 text-sm"
-                disabled={q.type === 'truefalse'}
-              />
+              <input value={opt} onChange={e => setOpt(i, e.target.value)}
+                placeholder={`Opção ${LABELS[i]}…`} className="inp" style={{ flex: 1 }}
+                disabled={q.type === 'truefalse'} />
               {q.type !== 'truefalse' && q.opcoes.length > 2 && (
-                <button onClick={() => removeOpt(i)} className="text-[--muted] hover:text-red-400 transition-colors text-lg px-1">×</button>
+                <button onClick={() => removeOpt(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#a78bfa', fontSize: 20, padding: '0 4px', lineHeight: 1 }}>×</button>
               )}
             </div>
           ))}
         </div>
         {q.type !== 'truefalse' && q.opcoes.length < 6 && (
-          <button onClick={addOpt} className="mt-2 text-sm text-[--accent] hover:text-violet-300 transition-colors">
+          <button onClick={addOpt} style={{ marginTop: 6, fontSize: 13, fontWeight: 800, color: '#8b5cf6', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             + Adicionar opção
           </button>
         )}
       </div>
 
-      {/* Points & Time */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Pts + Time */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest text-[--muted] mb-2">Pontuação</label>
-          <select value={q.pontuacao} onChange={e => setField('pontuacao', Number(e.target.value))} className="input-field text-sm">
+          <label className="lbl">Pontuação</label>
+          <select value={q.pontuacao} onChange={e => setField('pontuacao', Number(e.target.value))} className="inp">
             {[50, 100, 150, 200, 300, 500, 1000].map(v => <option key={v} value={v}>{v} pts</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest text-[--muted] mb-2">Tempo</label>
-          <select value={q.tempo} onChange={e => setField('tempo', Number(e.target.value))} className="input-field text-sm">
+          <label className="lbl">Tempo</label>
+          <select value={q.tempo} onChange={e => setField('tempo', Number(e.target.value))} className="inp">
             {[10, 15, 20, 30, 45, 60, 90].map(v => <option key={v} value={v}>{v}s</option>)}
           </select>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-2 pt-1">
-        <button onClick={handleSave} className="btn btn-success flex-1">
-          ✓ {initial ? 'Salvar alterações' : 'Adicionar pergunta'}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={save} className="btn btn-success" style={{ flex: 1 }}>
+          ✓ {initial ? 'Salvar' : 'Adicionar'}
         </button>
-        {onCancel && (
-          <button onClick={onCancel} className="btn btn-secondary" style={{ width: 'auto', padding: '12px 16px' }}>
-            Cancelar
-          </button>
-        )}
+        {onCancel && <button onClick={onCancel} className="btn btn-secondary btn-sm">Cancelar</button>}
       </div>
     </div>
   )
@@ -195,6 +120,7 @@ function QuestionForm({ onSave, onCancel, initial }) {
 export default function AdminCreate() {
   const navigate = useNavigate()
   const user = useStore(s => s.user)
+  const account = useStore(s => s.account)
   const [roomName, setRoomName] = useState('')
   const [questions, setQuestions] = useState([])
   const [adding, setAdding] = useState(false)
@@ -202,133 +128,147 @@ export default function AdminCreate() {
   const [creating, setCreating] = useState(false)
   const [autoMode, setAutoMode] = useState(false)
   const [autoInterval, setAutoInterval] = useState(5)
+  const [visibility, setVisibility] = useState('private')
   const fileRef = useRef()
 
-  const addQuestion = (q) => {
-    setQuestions(prev => [...prev, q])
-    setAdding(false)
-    toast.success('Pergunta adicionada!')
-  }
+  React.useEffect(() => {
+    const raw = localStorage.getItem('ql_template')
+    if (raw) {
+      try {
+        const t = JSON.parse(raw)
+        if (t.nome) setRoomName(t.nome)
+        if (Array.isArray(t.perguntas)) setQuestions(t.perguntas)
+        localStorage.removeItem('ql_template')
+        toast.success('Template carregado!')
+      } catch(e) {}
+    }
+  }, [])
 
-  const saveEdit = (q) => {
-    setQuestions(prev => prev.map((old, i) => i === editIdx ? q : old))
-    setEditIdx(null)
-    toast.success('Pergunta atualizada!')
-  }
-
-  const deleteQ = (i) => {
-    setQuestions(prev => prev.filter((_, j) => j !== i))
-    toast('Pergunta removida')
-  }
-
-  const moveQ = (i, dir) => {
-    setQuestions(prev => {
-      const arr = [...prev]
-      const j = i + dir
-      if (j < 0 || j >= arr.length) return arr
-      ;[arr[i], arr[j]] = [arr[j], arr[i]]
-      return arr
+  const addQ = (q) => { setQuestions(p => [...p, q]); setAdding(false); toast.success('Pergunta adicionada! ✅') }
+  const saveEdit = (q) => { setQuestions(p => p.map((o, i) => i === editIdx ? q : o)); setEditIdx(null); toast.success('Atualizada! ✅') }
+  const delQ = (i) => { setQuestions(p => p.filter((_, j) => j !== i)) }
+  const moveQ = (i, d) => {
+    setQuestions(p => {
+      const a = [...p]; const j = i + d
+      if (j < 0 || j >= a.length) return a
+      ;[a[i], a[j]] = [a[j], a[i]]; return a
     })
   }
 
-  // Export/Import JSON
   const exportJSON = () => {
-    const data = { nome: roomName, perguntas: questions }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `quizlive-${roomName || 'quiz'}.json`
-    a.click()
-    toast.success('Quiz exportado!')
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ nome: roomName, perguntas: questions, visibility }, null, 2)], { type: 'application/json' }))
+    a.download = `olquiz-${roomName || 'quiz'}.json`
+    a.click(); toast.success('Exportado!')
   }
 
   const importJSON = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
+    const f = e.target.files[0]; if (!f) return
+    const r = new FileReader()
+    r.onload = ev => {
       try {
-        const data = JSON.parse(ev.target.result)
-        if (data.nome) setRoomName(data.nome)
-        if (Array.isArray(data.perguntas)) {
-          setQuestions(data.perguntas)
-          toast.success(`${data.perguntas.length} perguntas importadas!`)
-        }
+        const d = JSON.parse(ev.target.result)
+        if (d.nome) setRoomName(d.nome)
+        if (Array.isArray(d.perguntas)) { setQuestions(d.perguntas); toast.success(`${d.perguntas.length} perguntas importadas!`) }
+        if (d.visibility) setVisibility(d.visibility)
       } catch { toast.error('Arquivo inválido') }
     }
-    reader.readAsText(file)
-    e.target.value = ''
+    r.readAsText(f); e.target.value = ''
   }
 
   const createRoom = async () => {
     if (!roomName.trim()) return toast.error('Digite o nome da sala')
-    if (questions.length === 0) return toast.error('Adicione ao menos uma pergunta')
+    if (!questions.length) return toast.error('Adicione ao menos uma pergunta')
     setCreating(true)
     try {
-      const roomRef = await addDoc(collection(db, 'rooms'), {
-        nome: roomName,
-        status: 'waiting',
-        currentQuestion: 0,
-        adminUid: user?.uid || '',
-        criadoEm: serverTimestamp(),
-        totalQuestions: questions.length,
-        autoMode,
-        autoInterval,
-        savedAt: Date.now(),
+      const code = generateRoomCode() // 5-char alphanumeric
+      // Use custom doc ID = the room code
+      await setDoc(doc(db, 'rooms', code), {
+        nome: roomName, status: 'waiting', currentQuestion: 0,
+        adminUid: user?.uid || '', criadoEm: serverTimestamp(),
+        totalQuestions: questions.length, autoMode, autoInterval,
+        visibility, // 'private' or 'global'
       })
-      const roomId = roomRef.id
 
-      // Save to history
-      const history = JSON.parse(localStorage.getItem('ql_history') || '[]')
-      history.unshift({ roomId, nome: roomName, criadoEm: Date.now(), totalQuestions: questions.length })
-      localStorage.setItem('ql_history', JSON.stringify(history.slice(0, 20)))
+      // Save as template if global or user is logged in
+      if (visibility === 'global' || account) {
+        await addDoc(collection(db, 'templates'), {
+          nome: roomName, perguntas: questions,
+          visibility, ownerUid: user?.uid || '',
+          criadoEm: serverTimestamp(),
+        })
+      }
 
       for (let i = 0; i < questions.length; i++) {
-        await addDoc(collection(db, 'questions'), { ...questions[i], roomId, ordem: i })
+        await addDoc(collection(db, 'questions'), { ...questions[i], roomId: code, ordem: i })
       }
-      navigate(`/room/${roomId}/control`)
+
+      const hist = JSON.parse(localStorage.getItem('ql_history') || '[]')
+      hist.unshift({ roomId: code, nome: roomName, criadoEm: Date.now(), totalQuestions: questions.length })
+      localStorage.setItem('ql_history', JSON.stringify(hist.slice(0, 20)))
+
+      navigate(`/room/${code}/control`)
     } catch (e) {
-      toast.error('Erro ao criar sala: ' + e.message)
-    } finally {
-      setCreating(false)
-    }
+      toast.error('Erro: ' + e.message)
+    } finally { setCreating(false) }
   }
 
   return (
-    <div className="min-h-screen">
-      <TopBar
-        left={<Logo size="sm" />}
-        right={
-          <button onClick={() => navigate('/')} className="btn btn-secondary text-sm py-2 px-3" style={{ width: 'auto' }}>
-            ← Voltar
-          </button>
-        }
-      />
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#fce7f3,#ede9fe,#dbeafe)' }}>
+      {/* Top bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'rgba(255,255,255,.7)', backdropFilter: 'blur(12px)', borderBottom: '2px solid #dde3ff', position: 'sticky', top: 0, zIndex: 200 }}>
+        <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 22, background: 'linear-gradient(135deg,#ff4d8d,#8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>OL Quiz! ⚡</span>
+        <button onClick={() => navigate('/')} className="btn btn-secondary btn-sm" style={{ width: 'auto' }}>← Voltar</button>
+      </div>
 
-      <div className="screen wide">
+      <div className="screen" style={{ maxWidth: 700 }}>
         {/* Room settings */}
         <div className="card">
-          <div className="text-xs font-semibold uppercase tracking-widest text-[--muted] mb-3">⚙️ Configurar sala</div>
-          <div className="flex flex-col gap-3">
+          <div className="card-title">⚙️ Configurar sala</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-widest text-[--muted] mb-2">Nome da sala</label>
+              <label className="lbl">Nome da sala</label>
               <input value={roomName} onChange={e => setRoomName(e.target.value)}
-                placeholder="Ex: Trivia de Ciências — Turma B"
-                className="input-field" />
+                placeholder="Ex: Trivia de Ciências — Turma B" className="inp" />
             </div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={autoMode} onChange={e => setAutoMode(e.target.checked)}
-                  className="w-4 h-4 accent-violet-500" />
-                <span className="text-sm font-medium">Modo automático</span>
-                <span className="text-xs text-[--muted]">(avança perguntas sozinho)</span>
-              </label>
+
+            {/* Visibility */}
+            <div>
+              <label className="lbl">Visibilidade do quiz</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[
+                  ['private', '🔒 Privado', 'Só você acessa'],
+                  ['global', '🌍 Global', 'Qualquer admin usa'],
+                ].map(([v, label, desc]) => (
+                  <button key={v} onClick={() => setVisibility(v)}
+                    style={{
+                      flex: 1, padding: '10px 12px', borderRadius: 10, border: `2px solid ${visibility === v ? '#8b5cf6' : '#dde3ff'}`,
+                      background: visibility === v ? '#f5f3ff' : '#fff', cursor: 'pointer',
+                      fontFamily: "'Nunito',sans-serif", textAlign: 'left', transition: 'all .2s',
+                    }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: visibility === v ? '#5b21b6' : '#1e1b4b' }}>{label}</div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2, fontWeight: 600 }}>{desc}</div>
+                  </button>
+                ))}
+              </div>
+              {visibility === 'global' && !account && (
+                <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', borderRadius: 8, border: '1.5px solid #fbbf24', fontSize: 13, fontWeight: 700, color: '#92400e' }}>
+                  ⚠️ Quiz global requer login. <button onClick={() => navigate('/login')} style={{ color: '#8b5cf6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, textDecoration: 'underline' }}>Fazer login</button>
+                </div>
+              )}
             </div>
+
+            {/* Auto mode */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input type="checkbox" checked={autoMode} onChange={e => setAutoMode(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: '#8b5cf6' }} />
+              <span style={{ fontWeight: 700, fontSize: 14, color: var => '#1e1b4b' }}>Modo automático</span>
+              <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>(avança sozinho)</span>
+            </label>
             {autoMode && (
-              <div className="flex items-center gap-3">
-                <label className="text-xs text-[--muted]">Intervalo entre perguntas:</label>
-                <select value={autoInterval} onChange={e => setAutoInterval(Number(e.target.value))}
-                  className="input-field text-sm" style={{ width: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Intervalo:</span>
+                <select value={autoInterval} onChange={e => setAutoInterval(Number(e.target.value))} className="inp" style={{ width: 'auto' }}>
                   {[3, 5, 8, 10, 15, 20].map(v => <option key={v} value={v}>{v}s</option>)}
                 </select>
               </div>
@@ -337,57 +277,41 @@ export default function AdminCreate() {
         </div>
 
         {/* Import/Export */}
-        <div className="flex gap-2">
-          <button onClick={exportJSON} className="btn btn-secondary flex-1 text-sm py-2" disabled={questions.length === 0}>
-            📤 Exportar JSON
-          </button>
-          <button onClick={() => fileRef.current?.click()} className="btn btn-secondary flex-1 text-sm py-2">
-            📥 Importar JSON
-          </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={exportJSON} className="btn btn-secondary btn-sm" style={{ flex: 1 }} disabled={!questions.length}>📤 Exportar JSON</button>
+          <button onClick={() => fileRef.current?.click()} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>📥 Importar JSON</button>
           <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={importJSON} />
         </div>
 
-        {/* Questions list */}
+        {/* Questions */}
         <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-xs font-semibold uppercase tracking-widest text-[--muted]">
-              📋 Perguntas
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div className="card-title" style={{ marginBottom: 0 }}>📋 Perguntas</div>
             <Badge variant="purple">{questions.length}</Badge>
           </div>
 
           {questions.length > 0 && (
-            <div className="flex flex-col gap-2 mb-4 max-h-72 overflow-y-auto pr-1">
+            <div className="scroll-list" style={{ maxHeight: 300, marginBottom: 12 }}>
               {questions.map((q, i) => (
                 editIdx === i ? (
-                  <div key={i} className="p-3 rounded-xl" style={{ background: 'var(--surface3)', border: '1px solid var(--accent)' }}>
-                    <QuestionForm initial={q} onSave={saveEdit} onCancel={() => setEditIdx(null)} />
-                  </div>
+                  <div key={i}><QuestionForm initial={q} onSave={saveEdit} onCancel={() => setEditIdx(null)} /></div>
                 ) : (
-                  <div key={i} className="flex items-start gap-3 p-3 rounded-xl animate-fade-in"
-                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-                    <span className="font-display font-bold text-xs mt-1" style={{ color: 'var(--accent)' }}>#{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium leading-snug line-clamp-2">{q.pergunta}</div>
-                      <div className="flex gap-2 mt-1 flex-wrap">
-                        <span className="text-xs text-[--muted]">{q.pontuacao}pts</span>
-                        <span className="text-xs text-[--muted]">·</span>
-                        <span className="text-xs text-[--muted]">{q.tempo}s</span>
-                        <span className="text-xs text-[--muted]">·</span>
-                        <span className="text-xs" style={{ color: 'var(--green)' }}>
-                          ✓ {LABELS[q.correta]}: {q.opcoes[q.correta]?.slice(0, 20)}
-                        </span>
+                  <div key={i} className="q-item">
+                    <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 13, color: '#8b5cf6', minWidth: 24 }}>#{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1e1b4b', lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                        {q.pergunta}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 3, display: 'flex', gap: 8, flexWrap: 'wrap', fontWeight: 700 }}>
+                        <span>{q.pontuacao}pts</span><span>·</span><span>{q.tempo}s</span><span>·</span>
+                        <span style={{ color: '#10b981' }}>✓ {LABELS[q.correta]}: {(q.opcoes[q.correta] || '').slice(0, 18)}</span>
                       </div>
                     </div>
-                    <div className="flex gap-1 flex-shrink-0">
-                      <button onClick={() => moveQ(i, -1)} disabled={i === 0}
-                        className="w-7 h-7 rounded flex items-center justify-center text-xs text-[--muted] hover:text-white hover:bg-[--surface3] transition-all disabled:opacity-30">↑</button>
-                      <button onClick={() => moveQ(i, 1)} disabled={i === questions.length - 1}
-                        className="w-7 h-7 rounded flex items-center justify-center text-xs text-[--muted] hover:text-white hover:bg-[--surface3] transition-all disabled:opacity-30">↓</button>
-                      <button onClick={() => setEditIdx(i)}
-                        className="w-7 h-7 rounded flex items-center justify-center text-xs hover:bg-[--surface3] transition-all">✏️</button>
-                      <button onClick={() => deleteQ(i)}
-                        className="w-7 h-7 rounded flex items-center justify-center text-xs hover:bg-red-500/20 transition-all">🗑</button>
+                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                      <button onClick={() => moveQ(i, -1)} disabled={i === 0} className="btn btn-ghost btn-xs">↑</button>
+                      <button onClick={() => moveQ(i, 1)} disabled={i === questions.length - 1} className="btn btn-ghost btn-xs">↓</button>
+                      <button onClick={() => setEditIdx(i)} className="btn btn-secondary btn-xs">✏️</button>
+                      <button onClick={() => delQ(i)} className="btn btn-danger btn-xs">🗑</button>
                     </div>
                   </div>
                 )
@@ -395,27 +319,20 @@ export default function AdminCreate() {
             </div>
           )}
 
-          {/* Add question form */}
           {adding ? (
-            <div className="p-4 rounded-xl" style={{ background: 'var(--surface3)', border: '1px solid var(--accent)' }}>
-              <div className="font-display font-bold text-sm mb-3" style={{ color: 'var(--accent)' }}>✨ Nova pergunta</div>
-              <QuestionForm onSave={addQuestion} onCancel={() => setAdding(false)} />
-            </div>
+            <QuestionForm onSave={addQ} onCancel={() => setAdding(false)} />
           ) : (
-            <button onClick={() => setAdding(true)} className="btn btn-secondary w-full text-sm py-3" style={{ borderStyle: 'dashed' }}>
+            <button onClick={() => setAdding(true)} className="btn btn-secondary" style={{ borderStyle: 'dashed', color: '#8b5cf6', fontWeight: 800 }}>
               + Adicionar pergunta
             </button>
           )}
         </div>
 
-        {/* Create button */}
-        <button onClick={createRoom} disabled={creating || questions.length === 0 || !roomName.trim()}
-          className="btn btn-primary w-full py-4 text-base font-bold">
-          {creating ? (
-            <><div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} /> Criando…</>
-          ) : (
-            <><span className="text-xl">🚀</span> Criar sala e gerar QR Code</>
-          )}
+        <button onClick={createRoom} disabled={creating || !questions.length || !roomName.trim() || (visibility === 'global' && !account)}
+          className="btn btn-primary" style={{ fontSize: 17, padding: '15px 24px' }}>
+          {creating
+            ? <><div className="spinner-sm" style={{ border: '3px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin .8s linear infinite', width: 20, height: 20 }} /> Criando…</>
+            : '🚀 Criar sala e gerar código'}
         </button>
       </div>
     </div>

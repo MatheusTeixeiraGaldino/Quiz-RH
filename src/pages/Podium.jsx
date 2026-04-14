@@ -13,20 +13,16 @@ export default function Podium() {
   const [players, setPlayers] = useState([])
 
   useEffect(() => {
-    const u = onSnapshot(query(collection(db, 'players'), where('roomId', '==', roomId)), s => {
-      setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.score || 0) - (a.score || 0)))
-    })
+    const u = onSnapshot(query(collection(db, 'players'), where('roomId', '==', roomId)), s =>
+      setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.score || 0) - (a.score || 0))))
     return u
   }, [roomId])
 
   useEffect(() => {
-    const fire = (angle, x) => confetti({
-      particleCount: 80, spread: 70, origin: { x, y: 0.8 }, angle,
-      colors: ['#46178f', '#ffdb00', '#e21b3c', '#1368ce', '#26890c'],
-    })
-    const t1 = setTimeout(() => { fire(60, 0.1); fire(120, 0.9) }, 500)
-    const t2 = setTimeout(() => { fire(80, 0.3); fire(100, 0.7) }, 1000)
-    const t3 = setTimeout(() => confetti({ particleCount: 150, spread: 110, origin: { x: 0.5, y: 0.6 } }), 1500)
+    const fire = (a, x) => confetti({ particleCount: 80, spread: 70, origin: { x, y: .8 }, angle: a, colors: ['#ff4d8d','#8b5cf6','#3b82f6','#f59e0b','#10b981'] })
+    const t1 = setTimeout(() => { fire(60, .1); fire(120, .9) }, 400)
+    const t2 = setTimeout(() => { fire(80, .3); fire(100, .7) }, 900)
+    const t3 = setTimeout(() => confetti({ particleCount: 150, spread: 110, origin: { x: .5, y: .6 } }), 1400)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [])
 
@@ -35,80 +31,55 @@ export default function Podium() {
   const me = players.find(p => p.id === playerId)
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#46178f,#2d0a6b)', display: 'flex', flexDirection: 'column' }}>
-
-      {/* Header */}
-      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span className="k-logo">kahoot<span>!</span></span>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#fce7f3,#ede9fe,#dbeafe)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'rgba(255,255,255,.7)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backdropFilter: 'blur(12px)', borderBottom: '2px solid #dde3ff' }}>
+        <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 22, background: 'linear-gradient(135deg,#ff4d8d,#8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>OL Quiz! ⚡</span>
         <button onClick={() => navigate('/')} className="btn btn-secondary btn-sm" style={{ width: 'auto' }}>🏠 Home</button>
       </div>
-
-      <div style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 600, margin: '0 auto', width: '100%' }}>
-
+      <div className="screen">
         <div style={{ textAlign: 'center' }}>
-          <span style={{ background: 'rgba(255,219,0,0.2)', color: '#ffdb00', border: '1px solid rgba(255,219,0,0.4)', borderRadius: 99, padding: '6px 16px', fontWeight: 700, fontSize: 14 }}>
-            🎉 Resultado final!
-          </span>
+          <div style={{ background: 'rgba(245,158,11,.1)', color: '#b45309', border: '1.5px solid rgba(245,158,11,.3)', borderRadius: 99, padding: '6px 18px', fontWeight: 800, fontSize: 14, display: 'inline-block' }}>🎉 Resultado final!</div>
         </div>
-
         {/* Podium */}
         <div className="podium">
-          {/* 2nd */}
           <div className="pod-col">
-            {p2 ? <>
-              <div className="pod-emoji" style={{ animationDelay: '.3s' }}>{p2.avatar || '🦊'}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, textAlign: 'center', maxWidth: 80, lineHeight: 1.2 }}>{p2.nome}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{(p2.score || 0).toLocaleString('pt-BR')}</div>
-              <div className="pod-block pod-p2">2</div>
-            </> : <div className="pod-block pod-p2" />}
+            {p2 ? <><div style={{ fontSize: 36, animation: 'bounceIn .6s .3s both' }}>{p2.avatar || '🦊'}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', maxWidth: 80, lineHeight: 1.2, color: '#1e1b4b' }}>{p2.nome}</div>
+              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 700 }}>{(p2.score || 0).toLocaleString('pt-BR')}</div>
+              <div className="pod-block pod-p2">2</div></> : <div className="pod-block pod-p2" />}
           </div>
-
-          {/* 1st */}
           <div className="pod-col">
-            {p1 ? <>
-              <div style={{ fontSize: 14, fontWeight: 700, textAlign: 'center', marginBottom: 2 }}>🏆</div>
-              <div className="pod-emoji big" style={{ animationDelay: '.1s' }}>{p1.avatar || '🦊'}</div>
-              <div style={{ fontSize: 14, fontWeight: 800, textAlign: 'center', maxWidth: 90, lineHeight: 1.2 }}>{p1.nome}</div>
-              <div style={{ fontSize: 13, color: '#ffdb00', fontWeight: 700 }}>{(p1.score || 0).toLocaleString('pt-BR')}</div>
-              <div className="pod-block pod-p1">1</div>
-            </> : <div className="pod-block pod-p1" />}
+            {p1 ? <><div style={{ fontSize: 14, fontWeight: 800, color: '#b45309', marginBottom: 2 }}>🏆</div>
+              <div style={{ fontSize: 50, animation: 'bounceIn .6s .1s both' }}>{p1.avatar || '🦊'}</div>
+              <div style={{ fontSize: 15, fontWeight: 900, textAlign: 'center', maxWidth: 90, lineHeight: 1.2, color: '#1e1b4b' }}>{p1.nome}</div>
+              <div style={{ fontSize: 13, color: '#f59e0b', fontWeight: 800 }}>{(p1.score || 0).toLocaleString('pt-BR')}</div>
+              <div className="pod-block pod-p1">1</div></> : <div className="pod-block pod-p1" />}
           </div>
-
-          {/* 3rd */}
           <div className="pod-col">
-            {p3 ? <>
-              <div className="pod-emoji" style={{ animationDelay: '.4s' }}>{p3.avatar || '🦊'}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, textAlign: 'center', maxWidth: 80, lineHeight: 1.2 }}>{p3.nome}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{(p3.score || 0).toLocaleString('pt-BR')}</div>
-              <div className="pod-block pod-p3">3</div>
-            </> : <div className="pod-block pod-p3" />}
+            {p3 ? <><div style={{ fontSize: 36, animation: 'bounceIn .6s .4s both' }}>{p3.avatar || '🦊'}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', maxWidth: 80, lineHeight: 1.2, color: '#1e1b4b' }}>{p3.nome}</div>
+              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 700 }}>{(p3.score || 0).toLocaleString('pt-BR')}</div>
+              <div className="pod-block pod-p3">3</div></> : <div className="pod-block pod-p3" />}
           </div>
         </div>
-
         {/* My result */}
         {me && myRank > 0 && (
-          <div style={{ textAlign: 'center', padding: '16px 20px', background: 'rgba(255,219,0,0.12)', border: '2px solid rgba(255,219,0,0.4)', borderRadius: 8, animation: 'scaleIn .4s ease' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>Seu resultado</div>
-            <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, fontSize: 48, color: '#ffdb00', lineHeight: 1 }}>#{myRank}</div>
-            <div style={{ color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>{(me.score || 0).toLocaleString('pt-BR')} pontos</div>
+          <div style={{ textAlign: 'center', padding: '16px 20px', background: 'rgba(139,92,246,.08)', border: '2px solid rgba(139,92,246,.25)', borderRadius: 14, animation: 'scaleIn .4s ease' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: '#6b7280', marginBottom: 4 }}>Seu resultado</div>
+            <div style={{ fontFamily: "'Fredoka One',cursive", fontSize: 48, color: '#8b5cf6', lineHeight: 1 }}>#{myRank}</div>
+            <div style={{ color: '#6b7280', fontWeight: 700, marginTop: 4 }}>{(me.score || 0).toLocaleString('pt-BR')} pontos</div>
           </div>
         )}
-
-        {/* Remaining players */}
+        {/* Rest */}
         {rest.length > 0 && (
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>
-              Outros participantes
-            </div>
+          <div style={{ background: 'linear-gradient(160deg,#4f46e5,#7c3aed)', borderRadius: 14, padding: 14 }}>
+            <div style={{ fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.6)', marginBottom: 8 }}>Outros participantes</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {rest.map((p, i) => (
-                <RankItem key={p.id} rank={i + 4} player={p} isMe={p.id === playerId} delay={i * 40} />
-              ))}
+              {rest.map((p, i) => <RankItem key={p.id} rank={i + 4} player={p} isMe={p.id === playerId} delay={i * 40} />)}
             </div>
           </div>
         )}
-
-        <button onClick={() => navigate(`/room/${roomId}/ranking`)} className="btn btn-secondary">📊 Ver ranking completo</button>
+        <button onClick={() => navigate(`/room/${roomId}/ranking`)} className="btn btn-secondary">📊 Ranking completo</button>
         <button onClick={() => navigate('/')} className="btn btn-secondary">🏠 Início</button>
       </div>
     </div>

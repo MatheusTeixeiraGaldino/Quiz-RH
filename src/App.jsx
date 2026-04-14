@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { signInAnonymously } from 'firebase/auth'
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { auth } from './firebase'
 import { useStore } from './store'
 
-// Pages
 import Home from './pages/Home'
+import Login from './pages/Login'
 import AdminCreate from './pages/AdminCreate'
 import AdminControl from './pages/AdminControl'
 import PlayerJoin from './pages/PlayerJoin'
@@ -14,21 +14,26 @@ import PlayerGame from './pages/PlayerGame'
 import Podium from './pages/Podium'
 import Ranking from './pages/Ranking'
 import QuizHistory from './pages/QuizHistory'
+import QuizTemplates from './pages/QuizTemplates'
 
 export default function App() {
   const setUser = useStore(s => s.setUser)
+  const setAccount = useStore(s => s.setAccount)
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         try {
           const cred = await signInAnonymously(auth)
           setUser(cred.user)
-        } catch (e) {
-          console.error('Auth error', e)
-        }
+          setAccount(null)
+        } catch (e) { console.error('Auth error', e) }
       } else {
         setUser(user)
+        // If not anonymous, set as account
+        if (!user.isAnonymous) {
+          setAccount({ uid: user.uid, email: user.email, displayName: user.displayName })
+        }
       }
     })
     return unsub
@@ -37,7 +42,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/admin" element={<AdminCreate />} />
+      <Route path="/templates" element={<QuizTemplates />} />
       <Route path="/room/:roomId/control" element={<AdminControl />} />
       <Route path="/room/:roomId/ranking" element={<Ranking />} />
       <Route path="/room/:roomId/podium" element={<Podium />} />
