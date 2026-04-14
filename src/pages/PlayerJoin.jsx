@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useStore } from '../store'
-import { TopBar, Logo, AvatarGrid } from '../components/UI'
+import { AvatarGrid } from '../components/UI'
 import toast from 'react-hot-toast'
 
 export default function PlayerJoin() {
@@ -19,76 +19,70 @@ export default function PlayerJoin() {
   const [loading, setLoading] = useState(false)
 
   const enter = async () => {
-    if (!name.trim()) return toast.error('Digite seu nome 👆')
+    if (!name.trim()) return toast.error('Digite seu apelido 👆')
     if (!user) return toast.error('Aguarde o login…')
     setLoading(true)
     try {
       const snap = await getDoc(doc(db, 'rooms', roomId))
       if (!snap.exists()) { toast.error('Sala não encontrada ❌'); return }
-      const roomData = snap.data()
-      if (roomData.status === 'finished') { toast.error('Esta sala já encerrou'); return }
-
+      const rd = snap.data()
+      if (rd.status === 'finished') { toast.error('Esta sala já encerrou'); return }
       setPlayerProfile(name.trim(), avatar)
-
-      await setDoc(doc(db, 'players', user.uid), {
-        nome: name.trim(),
-        avatar,
-        score: 0,
-        roomId,
-        entradoEm: serverTimestamp(),
-      })
-
-      navigate(roomData.status === 'playing' ? `/play/${roomId}` : `/wait/${roomId}`)
+      await setDoc(doc(db, 'players', user.uid), { nome: name.trim(), avatar, score: 0, roomId, entradoEm: serverTimestamp() })
+      navigate(rd.status === 'playing' ? `/play/${roomId}` : `/wait/${roomId}`)
     } catch (e) {
       toast.error('Erro: ' + e.message)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   return (
-    <div className="min-h-screen">
-      <TopBar
-        left={<Logo size="sm" />}
-        right={
-          <button onClick={() => navigate('/')} className="btn btn-secondary text-sm py-2 px-3" style={{ width: 'auto' }}>
-            ← Home
-          </button>
-        }
-      />
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#46178f,#2d0a6b)', display: 'flex', flexDirection: 'column' }}>
 
-      <div className="screen">
-        <div className="text-center pt-4 pb-2">
-          <div className="text-6xl mb-3 animate-bounce-in">{avatar}</div>
-          <h2 className="font-display font-bold text-2xl">Entrar na sala</h2>
-          <p className="text-[--muted] text-sm mt-1">
-            Sala: <code className="px-2 py-0.5 rounded text-xs font-mono" style={{ background: 'var(--surface2)' }}>{roomId}</code>
-          </p>
+      {/* Header */}
+      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span className="k-logo">kahoot<span>!</span></span>
+        <button onClick={() => navigate('/')} className="btn btn-secondary btn-sm" style={{ width: 'auto' }}>← Home</button>
+      </div>
+
+      <div className="screen" style={{ flex: 1, alignItems: 'stretch' }}>
+        {/* Avatar preview */}
+        <div style={{ textAlign: 'center', padding: '12px 0 4px' }}>
+          <div style={{ fontSize: 64, animation: 'float 3s ease-in-out infinite', marginBottom: 8 }}>{avatar}</div>
+          <h2 style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, fontSize: 22 }}>Entrar na sala</h2>
+          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 4 }}>
+            PIN: <strong style={{ color: '#ffdb00' }}>{roomId}</strong>
+          </div>
         </div>
 
-        <div className="card">
-          <div className="text-xs font-semibold uppercase tracking-widest text-[--muted] mb-3">Como te chamamos?</div>
+        {/* Name */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+            Seu apelido
+          </div>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && enter()}
-            placeholder="Seu nome ou apelido…"
-            className="input-field"
+            placeholder="Como te chamamos?"
+            className="inp"
+            style={{ fontSize: 18, fontWeight: 700, textAlign: 'center' }}
             maxLength={24}
-            autoComplete="given-name"
             autoFocus
           />
         </div>
 
-        <div className="card">
-          <div className="text-xs font-semibold uppercase tracking-widest text-[--muted] mb-3">Escolha seu avatar</div>
+        {/* Avatar grid */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginBottom: 10 }}>
+            Escolha seu avatar
+          </div>
           <AvatarGrid selected={avatar} onSelect={setAvatar} />
         </div>
 
-        <button onClick={enter} disabled={loading} className="btn btn-primary w-full py-4 text-base font-bold">
+        <button onClick={enter} disabled={loading} className="btn btn-primary" style={{ padding: '16px 24px', fontSize: 18, boxShadow: '0 6px 0 rgba(0,0,0,0.3)' }}>
           {loading
-            ? <><div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} /> Entrando…</>
-            : <><span className="text-xl">🎮</span> Entrar na sala</>}
+            ? <><div style={{ width: 20, height: 20, borderRadius: '50%', border: '3px solid rgba(104,67,255,.3)', borderTopColor: 'var(--kahoot-purple)', animation: 'spin .8s linear infinite' }} /> Entrando…</>
+            : '🎮 Entrar na sala'}
         </button>
       </div>
     </div>
