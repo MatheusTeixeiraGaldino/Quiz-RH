@@ -1,21 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { doc, onSnapshot, query, collection, where, orderBy, setDoc, updateDoc, getDoc, increment, serverTimestamp } from 'firebase/firestore'
+import {
+  doc, onSnapshot, query, collection, where, orderBy,
+  setDoc, updateDoc, getDoc, increment, serverTimestamp
+} from 'firebase/firestore'
 import { db } from '../firebase'
 import { useStore } from '../store'
-import { ProgressDots, TimerBar } from '../components/UI'
-import toast from 'react-hot-toast'
+import { OPT_ICONS, OPT_COLORS_CSS, LABELS } from '../components/UI'
 
-const LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
-const OPT_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c']
-const OPT_CLASSES = ['opt-a', 'opt-b', 'opt-c', 'opt-d', 'opt-e', 'opt-f']
+const OPT_COLORS_HEX = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
+const OPT_SHADOWS   = ['#9b0e25', '#0d4a9e', '#9a6f00', '#164d05']
+const OPT_SHAPES    = ['▲', '◆', '●', '■']
 
 export default function PlayerGame() {
   const { roomId } = useParams()
   const navigate = useNavigate()
   const user = useStore(s => s.user)
-  const playerName = useStore(s => s.playerName)
-  const playerAvatar = useStore(s => s.playerAvatar)
   const soundEnabled = useStore(s => s.soundEnabled)
 
   const [room, setRoom] = useState(null)
@@ -23,36 +23,34 @@ export default function PlayerGame() {
   const [answered, setAnswered] = useState({})
   const [myScore, setMyScore] = useState(0)
   const [timer, setTimer] = useState(30)
-  const [showFeedback, setShowFeedback] = useState(false)
+  const [phase, setPhase] = useState('question') // 'question' | 'feedback'
+  const [lastPts, setLastPts] = useState(0)
+  const [streak, setStreak] = useState(0)
   const timerRef = useRef(null)
   const playerId = user?.uid
 
-  // Subscriptions
   useEffect(() => {
     const u1 = onSnapshot(doc(db, 'rooms', roomId), s => setRoom({ id: s.id, ...s.data() }))
     const u2 = onSnapshot(query(collection(db, 'questions'), where('roomId', '==', roomId), orderBy('ordem')), s =>
       setQuestions(s.docs.map(d => ({ id: d.id, ...d.data() }))))
     const u3 = onSnapshot(query(collection(db, 'answers'), where('playerId', '==', playerId), where('roomId', '==', roomId)), s => {
-      let total = 0
-      const ans = {}
+      let total = 0; const ans = {}
       s.docs.forEach(d => {
-        const data = d.data()
-        ans[data.questionId] = data.resposta
-        total += (data.pontosGanhos || 0)
+        const da = d.data()
+        ans[da.questionId] = da.resposta
+        total += (da.pontosGanhos || 0)
       })
-      setAnswered(ans)
-      setMyScore(total)
+      setAnswered(ans); setMyScore(total)
     })
     return () => { u1(); u2(); u3() }
   }, [roomId, playerId])
 
-  // Timer
   useEffect(() => {
     if (!room || room.status !== 'playing') { clearInterval(timerRef.current); return }
     const cq = questions[room.currentQuestion]
     if (!cq) return
     setTimer(cq.tempo || 30)
-    setShowFeedback(false)
+    setPhase('question')
     clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
       setTimer(t => {
@@ -69,85 +67,76 @@ export default function PlayerGame() {
       const ctx = new (window.AudioContext || window.webkitAudioContext)()
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
+      osc.connect(gain); gain.connect(ctx.destination)
       if (type === 'correct') {
         osc.frequency.setValueAtTime(523, ctx.currentTime)
-        osc.frequency.setValueAtTime(659, ctx.currentTime + 0.1)
-        osc.frequency.setValueAtTime(784, ctx.currentTime + 0.2)
-        gain.gain.setValueAtTime(0.3, ctx.currentTime)
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4)
-        osc.start()
-        osc.stop(ctx.currentTime + 0.4)
+        osc.frequency.setValueAtTime(659, ctx.currentTime + .1)
+        osc.frequency.setValueAtTime(784, ctx.currentTime + .2)
+        gain.gain.setValueAtTime(.3, ctx.currentTime)
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + .5)
+        osc.start(); osc.stop(ctx.currentTime + .5)
       } else {
-        osc.frequency.setValueAtTime(300, ctx.currentTime)
-        osc.frequency.setValueAtTime(250, ctx.currentTime + 0.1)
-        gain.gain.setValueAtTime(0.3, ctx.currentTime)
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3)
-        osc.start()
-        osc.stop(ctx.currentTime + 0.3)
+        osc.frequency.setValueAtTime(200, ctx.currentTime)
+        osc.frequency.setValueAtTime(150, ctx.currentTime + .15)
+        gain.gain.setValueAtTime(.3, ctx.currentTime)
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + .4)
+        osc.start(); osc.stop(ctx.currentTime + .4)
       }
     } catch (e) {}
   }
 
   const answer = async (idx) => {
-    const cq = questions[room?.currentQuestion]
-    if (!cq || answered[cq.id] !== undefined || !playerId) return
-    const isCorrect = idx === cq.correta
+    const q = questions[room?.currentQuestion]
+    if (!q || answered[q.id] !== undefined || !playerId || timer === 0) return
+    const isCorrect = idx === q.correta
+    const maxTime = q.tempo || 30
+    const timeBonus = Math.max(0, Math.round((timer / maxTime) * q.pontuacao * 0.5))
+    const pts = isCorrect ? q.pontuacao + timeBonus : 0
 
-    // Speed bonus: more points for faster answers
-    const maxTime = cq.tempo || 30
-    const timeBonus = Math.max(0, Math.round((timer / maxTime) * cq.pontuacao * 0.5))
-    const pts = isCorrect ? cq.pontuacao + timeBonus : 0
-
-    setAnswered(prev => ({ ...prev, [cq.id]: idx }))
-    setShowFeedback(true)
+    setAnswered(prev => ({ ...prev, [q.id]: idx }))
+    setLastPts(pts)
+    if (isCorrect) setStreak(s => s + 1); else setStreak(0)
+    setPhase('feedback')
     playSound(isCorrect ? 'correct' : 'wrong')
 
-    const ansId = `${playerId}_${cq.id}`
+    const ansId = `${playerId}_${q.id}`
     try {
-      const exists = await getDoc(doc(db, 'answers', ansId))
-      if (!exists.exists()) {
+      const ex = await getDoc(doc(db, 'answers', ansId))
+      if (!ex.exists()) {
         await setDoc(doc(db, 'answers', ansId), {
-          playerId, questionId: cq.id, roomId,
+          playerId, questionId: q.id, roomId,
           resposta: idx, correta: isCorrect, pontosGanhos: pts,
           ts: serverTimestamp(),
         })
-        if (pts > 0) {
-          await updateDoc(doc(db, 'players', playerId), { score: increment(pts) })
-        }
+        if (pts > 0) await updateDoc(doc(db, 'players', playerId), { score: increment(pts) })
       }
     } catch (e) { console.error(e) }
   }
 
-  if (!room || !questions.length) {
+  // ── GAME OVER ──
+  if (room?.status === 'finished') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid var(--border2)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#46178f,#2d0a6b)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 24, gap: 20 }}>
+        <div style={{ fontSize: 80, animation: 'bounceIn .6s ease' }}>🏁</div>
+        <h2 style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, fontSize: 32 }}>Fim de jogo!</h2>
+        <div className="score-box" style={{ width: 240, margin: '8px 0' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>Sua pontuação</div>
+          <div className="score-num">{myScore.toLocaleString('pt-BR')}</div>
+        </div>
+        <button onClick={() => navigate(`/room/${roomId}/podium`)} className="btn btn-primary" style={{ maxWidth: 280, padding: '16px 24px', fontSize: 18 }}>
+          🏆 Ver pódio
+        </button>
+        <button onClick={() => navigate('/')} className="btn btn-secondary" style={{ maxWidth: 280 }}>
+          🏠 Início
+        </button>
       </div>
     )
   }
 
-  // Game over
-  if (room.status === 'finished') {
+  if (!room || !questions.length) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center px-6">
-        <div className="text-7xl mb-4 animate-bounce-in">🏁</div>
-        <h2 className="font-display font-bold text-3xl mb-2">Fim de jogo!</h2>
-        <p className="text-[--muted] mb-6">Veja como você se saiu</p>
-        <div className="card w-full max-w-xs mb-6">
-          <div className="text-xs font-semibold uppercase tracking-widest text-[--muted] mb-1">Sua pontuação final</div>
-          <div className="font-display font-black text-5xl"
-            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-            {myScore.toLocaleString('pt-BR')}
-          </div>
-        </div>
-        <button onClick={() => navigate(`/room/${roomId}/podium`)} className="btn btn-primary w-full max-w-xs mb-2 py-3">
-          🏆 Ver pódio
-        </button>
-        <button onClick={() => navigate('/')} className="btn btn-secondary w-full max-w-xs">
-          🏠 Início
-        </button>
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#46178f,#2d0a6b)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="spinner" />
       </div>
     )
   }
@@ -157,101 +146,123 @@ export default function PlayerGame() {
 
   if (!q) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center px-6">
-        <div className="text-5xl mb-4" style={{ animation: 'pulse 2s infinite' }}>⏳</div>
-        <p className="text-[--muted] text-lg">Aguardando próxima pergunta…</p>
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#46178f,#2d0a6b)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div style={{ fontSize: 48, animation: 'pulse 1.5s infinite' }}>⏳</div>
+        <p style={{ fontWeight: 700, fontSize: 18 }}>Aguardando próxima pergunta…</p>
       </div>
     )
   }
 
-  const myAnswer = answered[q.id]
-  const hasAnswered = myAnswer !== undefined
-  const isCorrect = hasAnswered && myAnswer === q.correta
+  const myAns = answered[q.id]
+  const hasAns = myAns !== undefined
+  const isOk = hasAns && myAns === q.correta
+  const timerWarn = timer <= 5
   const timerPct = (timer / (q.tempo || 30)) * 100
-  const timerWarning = timer <= 10
 
-  return (
-    <div className="screen">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-[--muted] text-sm">{cq + 1} / {questions.length}</span>
-        <div className="font-display font-black text-2xl" style={{ color: timerWarning ? '#ff4466' : 'var(--accent)', transition: 'color 0.3s' }}>
-          {timer}s
-        </div>
-        <div className="font-display font-bold text-sm" style={{ color: 'var(--accent)' }}>
-          {myScore.toLocaleString('pt-BR')} pts
-        </div>
-      </div>
-
-      <ProgressDots total={questions.length} current={cq} />
-      <TimerBar value={timer} max={q.tempo || 30} warning={timerWarning} />
-
-      {/* Question */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-3">
-          <span className="badge bg-violet-500/10 text-violet-300 border border-violet-500/25 text-xs">
-            {q.pontuacao} pts base
-          </span>
-          <span className="text-xs text-[--muted]">
-            {q.type === 'truefalse' ? '✔ V/F' : '🔢 Múltipla'}
-          </span>
-        </div>
-        {q.imagem && (
-          <img src={q.imagem} alt="" className="w-full h-36 object-cover rounded-xl mb-3" />
-        )}
-        <div className="font-display font-bold text-xl leading-snug">{q.pergunta}</div>
-      </div>
-
-      {/* Feedback */}
-      {hasAnswered && showFeedback && (
-        <div className={`text-center p-4 rounded-2xl animate-scale-in ${isCorrect ? 'bg-emerald-500/10 border border-emerald-500/25' : 'bg-red-500/10 border border-red-500/25'}`}>
-          <div className="text-4xl mb-2 animate-bounce-in">{isCorrect ? '✅' : '❌'}</div>
-          <div className="font-bold text-base" style={{ color: isCorrect ? 'var(--green)' : 'var(--red)' }}>
-            {isCorrect ? 'Acertou!' : 'Errou…'}
+  // ── FEEDBACK PHASE (after answering) ──
+  if (phase === 'feedback' && hasAns) {
+    return (
+      <div style={{ minHeight: '100vh', background: isOk ? 'linear-gradient(180deg,#1e7e34,#0d5c20)' : 'linear-gradient(180deg,#c0392b,#8e1c13)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div className="k-points-popup">
+          <div className="k-correct-icon">{isOk ? '✅' : '❌'}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+            {isOk ? 'Correto!' : 'Incorreto!'}
           </div>
-          {isCorrect
-            ? <div className="font-display font-black text-2xl mt-1" style={{ color: 'var(--green)' }}>
-                +{(answered._lastPts || q.pontuacao).toLocaleString('pt-BR')}
-              </div>
-            : <div className="text-sm text-[--muted] mt-1">
-                Correta: <b style={{ color: 'var(--green)' }}>{LABELS[q.correta]}</b> — {q.opcoes[q.correta]}
-              </div>
-          }
+          {isOk && (
+            <>
+              <div className="k-pts-label">+pontos</div>
+              <div className="k-pts-num">+{lastPts.toLocaleString('pt-BR')}</div>
+              {streak >= 2 && (
+                <div className="k-streak">🔥 {streak} acertos seguidos!</div>
+              )}
+            </>
+          )}
+          {!isOk && (
+            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.8)', marginTop: 8 }}>
+              Resposta certa: <strong style={{ color: '#ffdb00' }}>{LABELS[q.correta]}</strong> — {q.opcoes[q.correta]}
+            </div>
+          )}
+          <div style={{ marginTop: 24 }} className="score-box">
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginBottom: 2 }}>Total</div>
+            <div className="score-num">{myScore.toLocaleString('pt-BR')}</div>
+          </div>
         </div>
-      )}
+      </div>
+    )
+  }
 
-      {/* Options */}
-      <div className="grid grid-cols-2 gap-3">
-        {q.opcoes.filter(Boolean).map((opt, i) => {
-          let extraClass = ''
-          if (hasAnswered) {
-            if (i === q.correta) extraClass = 'correct'
-            else if (i === myAnswer) extraClass = 'wrong'
-          }
-          return (
-            <button
-              key={i}
-              onClick={() => answer(i)}
-              disabled={hasAnswered || timer === 0}
-              className={`option-btn ${OPT_CLASSES[i]} ${extraClass} ${myAnswer === i && !extraClass ? 'selected' : ''}`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-xs w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${OPT_COLORS[i]}22`, color: OPT_COLORS[i] }}>
-                  {LABELS[i]}
-                </span>
-                <span className="text-sm leading-snug">{opt}</span>
-              </div>
-            </button>
-          )
-        })}
+  // ── QUESTION PHASE ──
+  return (
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#46178f,#2d0a6b)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Top bar: question counter + score */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(0,0,0,0.2)' }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>{cq + 1}/{questions.length}</span>
+        <span style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, fontSize: 16, color: '#ffdb00' }}>
+          {myScore.toLocaleString('pt-BR')} pts
+        </span>
       </div>
 
-      {/* Score */}
-      <div className="text-center py-2">
-        <div className="text-xs font-semibold uppercase tracking-widest text-[--muted] mb-1">Pontuação total</div>
-        <div className="font-display font-black text-3xl"
-          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+      {/* Progress bar */}
+      <div className="k-progress" style={{ margin: '0 0 2px' }}>
+        <div className="k-progress-fill" style={{ width: `${((cq + 1) / questions.length) * 100}%` }} />
+      </div>
+
+      {/* Timer */}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 16px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', maxWidth: 400 }}>
+          <div className={`k-timer-circle ${timerWarn ? 'warn' : ''}`} style={{ flexShrink: 0 }}>{timer}</div>
+          <div style={{ flex: 1 }}>
+            <div className="k-timer-bar-wrap">
+              <div className={`k-timer-bar ${timerWarn ? 'warn' : ''}`} style={{ width: `${timerPct}%` }} />
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', flexShrink: 0, fontWeight: 600 }}>
+            {q.pontuacao}pts
+          </div>
+        </div>
+      </div>
+
+      {/* Question card */}
+      <div style={{ padding: '0 12px 12px' }}>
+        <div className="k-question">
+          {q.imagem && (
+            <img src={q.imagem} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 6, marginBottom: 12 }} onError={e => e.target.style.display = 'none'} />
+          )}
+          <div className="k-question-text">{q.pergunta}</div>
+        </div>
+      </div>
+
+      {/* Answer options — Kahoot 4 colors */}
+      <div style={{ padding: '0 12px', flex: 1 }}>
+        <div className="opt-grid">
+          {q.opcoes.filter(Boolean).map((opt, i) => {
+            let extraCls = ''
+            if (hasAns) {
+              if (i === q.correta) extraCls = 'correct'
+              else if (i === myAns) extraCls = 'wrong-my'
+              else extraCls = 'wrong'
+            }
+            const colorCls = OPT_COLORS_CSS[i] || 'opt-red'
+            return (
+              <button
+                key={i}
+                onClick={() => answer(i)}
+                disabled={hasAns || timer === 0}
+                className={`opt-btn ${colorCls} ${extraCls}`}
+              >
+                <div className="opt-icon">{OPT_SHAPES[i] || '●'}</div>
+                <div className="opt-text">{opt}</div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Bottom score bar */}
+      <div style={{ padding: '12px 16px 20px', textAlign: 'center' }}>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Pontuação</div>
+        <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, fontSize: 28, color: '#ffdb00' }}>
           {myScore.toLocaleString('pt-BR')}
         </div>
       </div>
