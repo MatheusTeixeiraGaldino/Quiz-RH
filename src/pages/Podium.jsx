@@ -4,7 +4,7 @@ import { onSnapshot, query, collection, where } from 'firebase/firestore'
 import confetti from 'canvas-confetti'
 import { db } from '../firebase'
 import { useStore } from '../store'
-import { TopBar, Logo, RankItem } from '../components/UI'
+import { RankItem } from '../components/UI'
 
 export default function Podium() {
   const { roomId } = useParams()
@@ -19,117 +19,97 @@ export default function Podium() {
     return u
   }, [roomId])
 
-  // Confetti on mount
   useEffect(() => {
     const fire = (angle, x) => confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { x, y: 0.8 },
-      angle,
-      colors: ['#6843ff', '#ff2d78', '#00d4ff', '#ffd60a', '#00ff88'],
+      particleCount: 80, spread: 70, origin: { x, y: 0.8 }, angle,
+      colors: ['#46178f', '#ffdb00', '#e21b3c', '#1368ce', '#26890c'],
     })
-    const t1 = setTimeout(() => { fire(60, 0.1); fire(120, 0.9) }, 400)
-    const t2 = setTimeout(() => { fire(80, 0.3); fire(100, 0.7) }, 900)
-    const t3 = setTimeout(() => {
-      confetti({ particleCount: 150, spread: 100, origin: { x: 0.5, y: 0.6 }, colors: ['#6843ff', '#ff2d78', '#ffd60a'] })
-    }, 1400)
+    const t1 = setTimeout(() => { fire(60, 0.1); fire(120, 0.9) }, 500)
+    const t2 = setTimeout(() => { fire(80, 0.3); fire(100, 0.7) }, 1000)
+    const t3 = setTimeout(() => confetti({ particleCount: 150, spread: 110, origin: { x: 0.5, y: 0.6 } }), 1500)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [])
 
   const [p1, p2, p3, ...rest] = players
+  const myRank = players.findIndex(p => p.id === playerId) + 1
+  const me = players.find(p => p.id === playerId)
 
   return (
-    <div className="min-h-screen">
-      <TopBar left={<Logo size="sm" />} right={
-        <button onClick={() => navigate('/')} className="btn btn-secondary text-sm py-2 px-3" style={{ width: 'auto' }}>🏠 Home</button>
-      } />
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#46178f,#2d0a6b)', display: 'flex', flexDirection: 'column' }}>
 
-      <div className="screen">
-        <div className="text-center mb-2">
-          <span className="badge bg-yellow-400/10 text-yellow-300 border border-yellow-400/20">
+      {/* Header */}
+      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span className="k-logo">kahoot<span>!</span></span>
+        <button onClick={() => navigate('/')} className="btn btn-secondary btn-sm" style={{ width: 'auto' }}>🏠 Home</button>
+      </div>
+
+      <div style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 600, margin: '0 auto', width: '100%' }}>
+
+        <div style={{ textAlign: 'center' }}>
+          <span style={{ background: 'rgba(255,219,0,0.2)', color: '#ffdb00', border: '1px solid rgba(255,219,0,0.4)', borderRadius: 99, padding: '6px 16px', fontWeight: 700, fontSize: 14 }}>
             🎉 Resultado final!
           </span>
         </div>
 
         {/* Podium */}
-        <div className="flex items-end justify-center gap-3 py-4">
+        <div className="podium">
           {/* 2nd */}
-          <div className="flex flex-col items-center gap-2">
-            {p2 ? (
-              <>
-                <div className="text-4xl animate-bounce-in" style={{ animationDelay: '0.3s' }}>{p2.avatar || '🦊'}</div>
-                <div className="text-xs font-semibold text-center max-w-[80px] leading-tight">{p2.nome}</div>
-                <div className="text-xs text-[--muted]">{(p2.score || 0).toLocaleString('pt-BR')}</div>
-                <div className="w-20 flex items-center justify-center rounded-t-xl font-display font-black text-2xl glow-silver"
-                  style={{ height: 72, background: 'linear-gradient(180deg, #b2bec3, #7f8c8d)', color: '#0a0e1a', animation: 'scaleIn 0.5s ease 0.3s both' }}>
-                  2
-                </div>
-              </>
-            ) : <div className="w-20 rounded-t-xl" style={{ height: 72, background: 'var(--surface2)' }} />}
+          <div className="pod-col">
+            {p2 ? <>
+              <div className="pod-emoji" style={{ animationDelay: '.3s' }}>{p2.avatar || '🦊'}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, textAlign: 'center', maxWidth: 80, lineHeight: 1.2 }}>{p2.nome}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{(p2.score || 0).toLocaleString('pt-BR')}</div>
+              <div className="pod-block pod-p2">2</div>
+            </> : <div className="pod-block pod-p2" />}
           </div>
 
           {/* 1st */}
-          <div className="flex flex-col items-center gap-2">
-            {p1 ? (
-              <>
-                <div className="text-6xl animate-bounce-in" style={{ animationDelay: '0.1s' }}>{p1.avatar || '🦊'}</div>
-                <div className="text-sm font-bold text-center max-w-[90px] leading-tight">{p1.nome}</div>
-                <div className="text-xs text-[--muted]">{(p1.score || 0).toLocaleString('pt-BR')}</div>
-                <div className="w-24 flex items-center justify-center rounded-t-xl font-display font-black text-3xl glow-gold"
-                  style={{ height: 100, background: 'linear-gradient(180deg, #ffd60a, #e6b800)', color: '#1a1000', animation: 'scaleIn 0.5s ease 0.2s both', boxShadow: '0 -4px 24px rgba(255,214,10,0.4)' }}>
-                  1
-                </div>
-              </>
-            ) : <div className="w-24 rounded-t-xl" style={{ height: 100, background: 'var(--surface2)' }} />}
+          <div className="pod-col">
+            {p1 ? <>
+              <div style={{ fontSize: 14, fontWeight: 700, textAlign: 'center', marginBottom: 2 }}>🏆</div>
+              <div className="pod-emoji big" style={{ animationDelay: '.1s' }}>{p1.avatar || '🦊'}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, textAlign: 'center', maxWidth: 90, lineHeight: 1.2 }}>{p1.nome}</div>
+              <div style={{ fontSize: 13, color: '#ffdb00', fontWeight: 700 }}>{(p1.score || 0).toLocaleString('pt-BR')}</div>
+              <div className="pod-block pod-p1">1</div>
+            </> : <div className="pod-block pod-p1" />}
           </div>
 
           {/* 3rd */}
-          <div className="flex flex-col items-center gap-2">
-            {p3 ? (
-              <>
-                <div className="text-4xl animate-bounce-in" style={{ animationDelay: '0.4s' }}>{p3.avatar || '🦊'}</div>
-                <div className="text-xs font-semibold text-center max-w-[80px] leading-tight">{p3.nome}</div>
-                <div className="text-xs text-[--muted]">{(p3.score || 0).toLocaleString('pt-BR')}</div>
-                <div className="w-20 flex items-center justify-center rounded-t-xl font-display font-black text-2xl glow-bronze"
-                  style={{ height: 54, background: 'linear-gradient(180deg, #cd7c32, #8d4e0e)', color: '#1a0800', animation: 'scaleIn 0.5s ease 0.4s both' }}>
-                  3
-                </div>
-              </>
-            ) : <div className="w-20 rounded-t-xl" style={{ height: 54, background: 'var(--surface2)' }} />}
+          <div className="pod-col">
+            {p3 ? <>
+              <div className="pod-emoji" style={{ animationDelay: '.4s' }}>{p3.avatar || '🦊'}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, textAlign: 'center', maxWidth: 80, lineHeight: 1.2 }}>{p3.nome}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{(p3.score || 0).toLocaleString('pt-BR')}</div>
+              <div className="pod-block pod-p3">3</div>
+            </> : <div className="pod-block pod-p3" />}
           </div>
         </div>
 
-        {/* My result highlight */}
-        {playerId && players.find(p => p.id === playerId) && (() => {
-          const myRank = players.findIndex(p => p.id === playerId) + 1
-          const me = players.find(p => p.id === playerId)
-          return (
-            <div className="card text-center animate-scale-in" style={{ borderColor: 'var(--accent)', background: 'rgba(104,67,255,0.06)' }}>
-              <div className="text-xs font-semibold uppercase tracking-widest text-[--muted] mb-1">Seu resultado</div>
-              <div className="font-display font-black text-4xl" style={{ color: 'var(--accent)' }}>#{myRank}</div>
-              <div className="text-sm text-[--muted] mt-1">{(me.score || 0).toLocaleString('pt-BR')} pontos</div>
-            </div>
-          )
-        })()}
+        {/* My result */}
+        {me && myRank > 0 && (
+          <div style={{ textAlign: 'center', padding: '16px 20px', background: 'rgba(255,219,0,0.12)', border: '2px solid rgba(255,219,0,0.4)', borderRadius: 8, animation: 'scaleIn .4s ease' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>Seu resultado</div>
+            <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, fontSize: 48, color: '#ffdb00', lineHeight: 1 }}>#{myRank}</div>
+            <div style={{ color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>{(me.score || 0).toLocaleString('pt-BR')} pontos</div>
+          </div>
+        )}
 
         {/* Remaining players */}
         {rest.length > 0 && (
-          <div className="card">
-            <div className="text-xs font-semibold uppercase tracking-widest text-[--muted] mb-3">Outros participantes</div>
-            <div className="flex flex-col gap-2">
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>
+              Outros participantes
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {rest.map((p, i) => (
-                <RankItem key={p.id} rank={i + 4} player={p} isMe={p.id === playerId} delay={i * 50} />
+                <RankItem key={p.id} rank={i + 4} player={p} isMe={p.id === playerId} delay={i * 40} />
               ))}
             </div>
           </div>
         )}
 
-        <button onClick={() => navigate(`/room/${roomId}/ranking`)} className="btn btn-secondary w-full">
-          📊 Ver ranking completo
-        </button>
-        <button onClick={() => navigate('/')} className="btn btn-secondary w-full">
-          🏠 Início
-        </button>
+        <button onClick={() => navigate(`/room/${roomId}/ranking`)} className="btn btn-secondary">📊 Ver ranking completo</button>
+        <button onClick={() => navigate('/')} className="btn btn-secondary">🏠 Início</button>
       </div>
     </div>
   )
