@@ -3,69 +3,101 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { doc, onSnapshot, query, collection, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useStore } from '../store'
-import { Badge } from '../components/UI'
 
 export default function PlayerWait() {
   const { roomId } = useParams()
   const navigate = useNavigate()
   const playerName = useStore(s => s.playerName)
   const playerAvatar = useStore(s => s.playerAvatar)
+  const [playerCount, setPlayerCount] = React.useState(0)
+  const [players, setPlayers] = React.useState([])
+  const [roomName, setRoomName] = React.useState('')
 
   useEffect(() => {
     const u = onSnapshot(doc(db, 'rooms', roomId), s => {
       const d = s.data()
+      if (d?.nome) setRoomName(d.nome)
       if (d?.status === 'playing') navigate(`/play/${roomId}`)
       if (d?.status === 'finished') navigate('/')
     })
     return u
   }, [roomId])
 
-  const [playerCount, setPlayerCount] = React.useState(0)
   useEffect(() => {
     const u = onSnapshot(query(collection(db, 'players'), where('roomId', '==', roomId)), s => {
       setPlayerCount(s.size)
+      setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() })))
     })
     return u
   }, [roomId])
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center text-center px-6"
-      style={{
-        background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(104,67,255,0.2) 0%, transparent 70%), var(--bg)',
-      }}>
-      {/* Orb */}
-      <div className="orb mb-6 animate-float" style={{ width: 120, height: 120 }}>
-        <span className="text-5xl">{playerAvatar || '🦊'}</span>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #46178f 0%, #2d0a6b 100%)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Top: room info */}
+      <div style={{ background: 'rgba(0,0,0,0.2)', padding: '16px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+          Sala
+        </div>
+        <div style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 900, fontSize: 22, color: '#fff' }}>
+          {roomName || roomId}
+        </div>
       </div>
 
-      <h2 className="font-display font-bold text-2xl mb-1">{playerName || 'Jogador'}</h2>
-      <p className="text-[--muted] mb-8">Você está na fila! 🎉</p>
+      {/* PIN box */}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 16px 0' }}>
+        <div className="k-pin-box">
+          <div className="k-pin-label">PIN do jogo</div>
+          <div className="k-pin-num">{roomId.slice(0, 20)}</div>
+        </div>
+      </div>
 
-      <div className="flex flex-col items-center gap-4">
-        <div className="text-[--text2] text-base">
-          Aguardando o admin iniciar o jogo…
+      {/* Player avatar + name */}
+      <div style={{ textAlign: 'center', padding: '16px 16px 8px' }}>
+        <div style={{ fontSize: 56, marginBottom: 8, animation: 'float 3s ease-in-out infinite' }}>{playerAvatar || '🦊'}</div>
+        <div style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 900, fontSize: 24, color: '#fff' }}>
+          {playerName || 'Jogador'}
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginTop: 4 }}>
+          Você está na sala! 🎉
+        </div>
+      </div>
+
+      {/* Players joined */}
+      <div style={{ flex: 1, padding: '12px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.1)', borderRadius: 99,
+            padding: '8px 20px', border: '1px solid rgba(255,255,255,0.2)',
+          }}>
+            <span style={{ fontSize: 18 }}>👥</span>
+            <span style={{ fontWeight: 700, fontSize: 16 }}>{playerCount} jogador{playerCount !== 1 ? 'es' : ''} na sala</span>
+          </div>
         </div>
 
-        {/* Animated dots */}
-        <div className="flex gap-2 mt-2">
+        {/* Animated dots loader */}
+        <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: 500 }}>
+          Aguardando o host iniciar…
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
           {[0, 1, 2].map(i => (
             <div key={i} style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: 'var(--accent)',
-              animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
-              opacity: 0.7,
+              width: 10, height: 10, borderRadius: '50%', background: '#ffdb00',
+              animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
             }} />
           ))}
         </div>
 
-        <Badge variant="purple">
-          👥 {playerCount} jogador{playerCount !== 1 ? 'es' : ''} na sala
-        </Badge>
-      </div>
-
-      <div className="mt-10 text-[--muted] text-sm">
-        Sala: <code className="px-2 py-0.5 rounded text-xs font-mono"
-          style={{ background: 'var(--surface2)' }}>{roomId}</code>
+        {/* Players grid */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxHeight: 200, overflow: 'hidden' }}>
+          {players.map(p => (
+            <div key={p.id} className="chip" style={{ animation: 'scaleIn .25s ease' }}>
+              <span>{p.avatar}</span>
+              <span style={{ fontWeight: 700 }}>{p.nome}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
