@@ -1,84 +1,77 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useStore } from '../store'
 import { Logo } from '../components/UI'
 import toast from 'react-hot-toast'
 
 export default function Home() {
   const navigate = useNavigate()
   const [code, setCode] = useState('')
-  const setRoomId = useStore(s => s.setRoomId)
 
   const handleJoin = () => {
-    const trimmed = code.trim().toUpperCase()
-    if (!trimmed) return toast.error('Digite o código da sala')
-    setRoomId(trimmed)
+    const trimmed = code.trim()
+    if (!trimmed) return toast.error('Digite o PIN da sala')
     navigate(`/join/${trimmed}`)
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8"
-      style={{
-        background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(104,67,255,0.25) 0%, transparent 70%), var(--bg)',
-      }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #46178f 0%, #2d0a6b 100%)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Header */}
+      <div style={{ padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span className="k-logo" style={{ fontSize: 28 }}>kahoot<span>!</span></span>
+        <button onClick={() => navigate('/admin')} className="btn btn-primary btn-sm" style={{ width: 'auto' }}>
+          Criar Quiz
+        </button>
+      </div>
 
       {/* Hero */}
-      <div className="text-center mb-12 animate-slide-up">
-        <div className="text-7xl mb-6 animate-float">⚡</div>
-        <h1 className="font-display font-black text-6xl mb-4 leading-none tracking-tight"
-          style={{ background: 'linear-gradient(135deg, #c4b0ff 0%, #ff2d78 50%, #00d4ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-          QuizLive
-        </h1>
-        <p className="text-[--text2] text-lg max-w-sm mx-auto leading-relaxed">
-          Quiz interativo em tempo real para grupos, turmas e eventos
-        </p>
-      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', textAlign: 'center', gap: 32 }}>
 
-      {/* Actions */}
-      <div className="w-full max-w-sm flex flex-col gap-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-        {/* Admin */}
-        <button onClick={() => navigate('/admin')} className="btn btn-primary w-full py-4 text-base">
-          <span className="text-xl">🎮</span>
-          Criar sala (Admin)
-        </button>
-
-        {/* Divider */}
-        <div className="flex items-center gap-3 text-[--muted] text-sm">
-          <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-          ou entre numa sala
-          <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+        <div style={{ animation: 'slideUp .4s ease' }}>
+          <div style={{ fontSize: 80, marginBottom: 12, animation: 'float 3s ease-in-out infinite' }}>⚡</div>
+          <h1 style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 900, fontSize: 48, color: '#fff', lineHeight: 1, marginBottom: 10, letterSpacing: -1 }}>
+            Quiz em Tempo Real
+          </h1>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 18, fontWeight: 500 }}>
+            Crie, compartilhe e jogue com qualquer pessoa
+          </p>
         </div>
 
-        {/* Join */}
-        <div className="card gap-3 flex flex-col">
-          <div className="text-xs font-semibold uppercase tracking-widest text-[--muted]">Código da sala</div>
-          <div className="flex gap-2">
-            <input
-              value={code}
-              onChange={e => setCode(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleJoin()}
-              placeholder="EX: ABC123"
-              className="input-field flex-1 font-display font-bold tracking-widest text-center text-lg"
-              maxLength={30}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <button onClick={handleJoin} className="btn btn-primary" style={{ width: 'auto', padding: '11px 20px' }}>
-              Entrar
-            </button>
+        {/* Enter PIN box — main Kahoot CTA */}
+        <div style={{
+          background: '#fff', borderRadius: 8, padding: '28px 32px',
+          width: '100%', maxWidth: 400,
+          boxShadow: '0 8px 0 rgba(0,0,0,0.3)',
+          animation: 'slideUp .5s .1s both',
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
+            Entre com um PIN
           </div>
+          <input
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleJoin()}
+            placeholder="PIN do jogo"
+            className="inp-dark"
+            style={{ fontSize: 22, fontWeight: 900, textAlign: 'center', letterSpacing: 4, marginBottom: 14 }}
+            maxLength={30}
+            autoComplete="off"
+          />
+          <button onClick={handleJoin} className="btn btn-purple" style={{ fontSize: 18, padding: '14px 24px', borderRadius: 8, boxShadow: '0 4px 0 rgba(0,0,0,0.25)' }}>
+            Entrar
+          </button>
         </div>
 
-        {/* History */}
-        <button onClick={() => navigate('/history')} className="btn btn-secondary w-full">
-          <span>📚</span> Histórico de quizzes
-        </button>
+        {/* Secondary actions */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 400, animation: 'slideUp .5s .2s both' }}>
+          <button onClick={() => navigate('/admin')} className="btn btn-secondary" style={{ fontWeight: 700 }}>
+            🎮 Criar sala (Admin)
+          </button>
+          <button onClick={() => navigate('/history')} className="btn btn-secondary" style={{ fontWeight: 700 }}>
+            📚 Histórico de quizzes
+          </button>
+        </div>
       </div>
-
-      {/* Footer */}
-      <p className="mt-12 text-[--muted] text-xs text-center">
-        📱 Escaneie o QR Code ou use o link da sala para entrar
-      </p>
     </div>
   )
 }
