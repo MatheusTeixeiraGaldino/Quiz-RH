@@ -2,9 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rooms — 5-char alphanumeric ID set by client
+    // Rooms
     match /rooms/{roomId} {
-      allow read: if request.auth != null;
+      allow read:   if request.auth != null;
       allow create: if request.auth != null;
       allow update: if request.auth != null;
       allow delete: if false;
@@ -12,35 +12,41 @@ service cloud.firestore {
 
     // Questions
     match /questions/{questionId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
+      allow read:           if request.auth != null;
+      allow create:         if request.auth != null;
       allow update, delete: if false;
     }
 
     // Players
     match /players/{playerId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null && request.auth.uid == playerId;
+      allow read:           if request.auth != null;
+      allow create, update: if request.auth != null
+                               && request.auth.uid == playerId;
       allow delete: if false;
     }
 
     // Answers
     match /answers/{answerId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null &&
-        request.resource.data.playerId == request.auth.uid;
+      allow read:   if request.auth != null;
+      allow create: if request.auth != null
+                       && request.resource.data.playerId == request.auth.uid;
       allow update, delete: if false;
     }
 
-    // Templates — global ones readable by all, private only by owner
+    // Templates
+    // Global: anyone authenticated can read
+    // Private: only owner can read
+    // Create: authenticated non-anonymous users only
     match /templates/{templateId} {
-      allow read: if request.auth != null &&
-        (resource.data.visibility == 'global' ||
-         resource.data.ownerUid == request.auth.uid);
-      allow create: if request.auth != null &&
-        request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if request.auth != null &&
-        resource.data.ownerUid == request.auth.uid;
+      allow read: if request.auth != null
+                     && (resource.data.visibility == 'global'
+                         || resource.data.ownerUid == request.auth.uid);
+
+      allow create: if request.auth != null
+                       && request.resource.data.ownerUid == request.auth.uid;
+
+      allow update, delete: if request.auth != null
+                               && resource.data.ownerUid == request.auth.uid;
     }
   }
 }
