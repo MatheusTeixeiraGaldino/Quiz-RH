@@ -262,7 +262,7 @@ export default function AdminCreate() {
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
               <input type="checkbox" checked={autoMode} onChange={e => setAutoMode(e.target.checked)}
                 style={{ width: 16, height: 16, accentColor: '#8b5cf6' }} />
-              <span style={{ fontWeight: 700, fontSize: 14, color: var => '#1e1b4b' }}>Modo automático</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#1e1b4b' }}>Modo automático</span>
               <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>(avança sozinho)</span>
             </label>
             {autoMode && (
