@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, onSnapshot, query, collection, where, orderBy,
+  doc, onSnapshot, query, collection, where,
   setDoc, updateDoc, getDoc, increment, serverTimestamp
 } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -48,11 +48,13 @@ export default function PlayerGame() {
     if (!roomId) return
     const q = query(
       collection(db, 'questions'),
-      where('roomId', '==', roomId),
-      orderBy('ordem')
+      where('roomId', '==', roomId)
     )
     const unsub = onSnapshot(q, snap => {
-      setQuestions(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      const qs = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+      setQuestions(qs)
     })
     return unsub
   }, [roomId])

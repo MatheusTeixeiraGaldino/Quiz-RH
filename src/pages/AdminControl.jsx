@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { doc, updateDoc, onSnapshot, query, collection, where, orderBy } from 'firebase/firestore'
+import { doc, updateDoc, onSnapshot, query, collection, where } from 'firebase/firestore'
 import QRCode from 'qrcode'
 import { db } from '../firebase'
 import { RankItem, OPT_COLORS, OPT_SHAPES, LABELS } from '../components/UI'
@@ -30,8 +30,11 @@ export default function AdminControl() {
     const u1 = onSnapshot(doc(db, 'rooms', roomId), s =>
       setRoom({ id: s.id, ...s.data() }))
     const u2 = onSnapshot(
-      query(collection(db, 'questions'), where('roomId', '==', roomId), orderBy('ordem')),
-      s => setQuestions(s.docs.map(d => ({ id: d.id, ...d.data() }))))
+      query(collection(db, 'questions'), where('roomId', '==', roomId)),
+      s => setQuestions(
+        s.docs.map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+      ))
     const u3 = onSnapshot(
       query(collection(db, 'players'), where('roomId', '==', roomId)),
       s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.score || 0) - (a.score || 0))))
