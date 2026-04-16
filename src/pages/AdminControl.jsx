@@ -11,109 +11,106 @@ function getJoinLink(roomId) {
 }
 
 export default function AdminControl() {
-  const { roomId } = useParams()
-  const navigate   = useNavigate()
+  const { roomId }  = useParams()
+  const navigate    = useNavigate()
 
-  const [room,      setRoom]      = useState(null)
-  const [questions, setQuestions] = useState([])
-  const [players,   setPlayers]   = useState([])
-  const [answers,   setAnswers]   = useState([])
-  const [timer,     setTimer]     = useState(0)
+  const [room,       setRoom]       = useState(null)
+  const [questions,  setQuestions]  = useState([])
+  const [players,    setPlayers]    = useState([])
+  const [answers,    setAnswers]    = useState([])
+  const [timer,      setTimer]      = useState(0)
+  const [qOpen,      setQOpen]      = useState(false) // accordion for questions list
 
-  const timerRef   = useRef(null)
-  const qrDoneRef  = useRef(false)
-  const autoRef    = useRef(null)
-  const lastQRef   = useRef(-1)   // tracks which question the timer is for
+  const timerRef  = useRef(null)
+  const qrDoneRef = useRef(false)
+  const autoRef   = useRef(null)
+  const lastQRef  = useRef(-1)
+  const advancedRef = useRef(false) // prevent double-advance
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const u1 = onSnapshot(doc(db, 'rooms', roomId), s =>
-      setRoom({ id: s.id, ...s.data() }))
-    const u2 = onSnapshot(
-      query(collection(db, 'questions'), where('roomId', '==', roomId)),
-      s => setQuestions(
-        s.docs.map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
-      ))
-    const u3 = onSnapshot(
-      query(collection(db, 'players'), where('roomId', '==', roomId)),
+    const u1 = onSnapshot(doc(db, 'rooms', roomId), s => setRoom({ id: s.id, ...s.data() }))
+    const u2 = onSnapshot(query(collection(db, 'questions'), where('roomId', '==', roomId)),
+      s => setQuestions(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))))
+    const u3 = onSnapshot(query(collection(db, 'players'), where('roomId', '==', roomId)),
       s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.score || 0) - (a.score || 0))))
-    const u4 = onSnapshot(
-      query(collection(db, 'answers'), where('roomId', '==', roomId)),
+    const u4 = onSnapshot(query(collection(db, 'answers'), where('roomId', '==', roomId)),
       s => setAnswers(s.docs.map(d => d.data())))
     return () => { u1(); u2(); u3(); u4() }
   }, [roomId])
 
-  // ── QR code (only once) ────────────────────────────────────────────────────
+  // ── QR code ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!room || room.status !== 'waiting' || qrDoneRef.current) return
     const t = setTimeout(() => {
       const canvas = document.getElementById('qr-canvas')
       if (canvas) {
         qrDoneRef.current = true
-        QRCode.toCanvas(canvas, getJoinLink(roomId), {
-          width: 180, margin: 1,
-          color: { dark: '#1e1b4b', light: '#ffffff' },
-        })
+        QRCode.toCanvas(canvas, getJoinLink(roomId), { width: 180, margin: 1, color: { dark: '#1e1b4b', light: '#ffffff' } })
       }
     }, 100)
     return () => clearTimeout(t)
   }, [room?.status])
 
-  // ── Timer ─────────────────────────────────────────────────────────────────
+  // ── Timer ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!room || room.status !== 'playing' || questions.length === 0) {
-      clearInterval(timerRef.current)
-      return
-    }
+    if (!room || room.status !== 'playing' || !questions.length) { clearInterval(timerRef.current); return }
     const cqIdx = room.currentQuestion ?? 0
     const cq = questions[cqIdx]
     if (!cq) return
-
-    // Only reset when question actually changes
     if (lastQRef.current === cqIdx) return
     lastQRef.current = cqIdx
+    advancedRef.current = false
 
-    const tempo = cq.tempo || 30
-    setTimer(tempo)
+    setTimer(cq.tempo || 30)
     clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
-      setTimer(t => {
-        if (t <= 1) { clearInterval(timerRef.current); return 0 }
-        return t - 1
-      })
+      setTimer(t => { if (t <= 1) { clearInterval(timerRef.current); return 0 } return t - 1 })
     }, 1000)
-
     return () => clearInterval(timerRef.current)
   }, [room?.currentQuestion, room?.status, questions.length])
 
-  // ── Auto mode ─────────────────────────────────────────────────────────────
+  // ── Auto-advance when ALL players answered ─────────────────────────────────
+  useEffect(() => {
+    if (!room?.autoAdvance || room.status !== 'playing' || !players.length || !questions.length) return
+    const cqIdx = room.currentQuestion ?? 0
+    const curQ  = questions[cqIdx]
+    if (!curQ) return
+
+    const answeredCount = answers.filter(a => a.questionId === curQ.id).length
+    if (answeredCount < players.length) return
+    if (advancedRef.current) return
+    advancedRef.current = true
+
+    // Small delay so players see their feedback
+    const t = setTimeout(() => advance(cqIdx), 1500)
+    return () => clearTimeout(t)
+  }, [answers.length, room?.autoAdvance, room?.currentQuestion, players.length])
+
+  // ── Auto-mode (time-based) ─────────────────────────────────────────────────
   useEffect(() => {
     clearTimeout(autoRef.current)
-    if (!room?.autoMode || room.status !== 'playing' || questions.length === 0) return
-
+    if (!room?.autoMode || room.status !== 'playing' || !questions.length) return
     const cqIdx = room.currentQuestion ?? 0
-    const cq = questions[cqIdx]
+    const cq    = questions[cqIdx]
     if (!cq) return
-
     const totalMs = ((cq.tempo || 30) + (room.autoInterval || 5)) * 1000
     autoRef.current = setTimeout(() => {
-      if ((room.currentQuestion ?? 0) < questions.length - 1) {
-        updateDoc(doc(db, 'rooms', roomId), { currentQuestion: (room.currentQuestion ?? 0) + 1 })
-      } else {
-        updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })
-          .then(() => navigate(`/room/${roomId}/podium`))
-      }
+      if (!advancedRef.current) advance(cqIdx)
     }, totalMs)
-
     return () => clearTimeout(autoRef.current)
   }, [room?.currentQuestion, room?.status, room?.autoMode, questions.length])
 
-  // Cleanup
-  useEffect(() => () => {
-    clearInterval(timerRef.current)
-    clearTimeout(autoRef.current)
-  }, [])
+  useEffect(() => () => { clearInterval(timerRef.current); clearTimeout(autoRef.current) }, [])
+
+  const advance = (cqIdx) => {
+    if (cqIdx < questions.length - 1) {
+      updateDoc(doc(db, 'rooms', roomId), { currentQuestion: cqIdx + 1 })
+    } else {
+      updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })
+        .then(() => navigate(`/room/${roomId}/podium`))
+    }
+  }
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (!room) return (
@@ -130,25 +127,20 @@ export default function AdminControl() {
   const timerPct     = curQ ? (timer / (curQ.tempo || 30)) * 100 : 0
   const optStats     = (curQ?.opcoes || []).map((_, i) => answeredForQ.filter(a => a.resposta === i).length)
   const maxStat      = Math.max(...optStats, 1)
+  const allAnswered  = players.length > 0 && answeredForQ.length >= players.length
 
   const lightBg = 'linear-gradient(160deg,#fce7f3,#ede9fe,#dbeafe)'
   const gameBg  = 'linear-gradient(160deg,#4f46e5 0%,#7c3aed 50%,#db2777 100%)'
-
-  const LogoBar = ({ status }) => (
-    <div style={{ background: 'rgba(255,255,255,.12)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 200, backdropFilter: 'blur(12px)' }}>
-      <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 22, color: '#fff' }}>OL Quiz! ⚡</span>
-      {status === 'playing' && (
-        <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>🔴 Ao vivo</span>
-      )}
-    </div>
-  )
 
   // ── WAITING ────────────────────────────────────────────────────────────────
   if (room.status === 'waiting') return (
     <div style={{ minHeight: '100vh', background: lightBg, display: 'flex', flexDirection: 'column' }}>
       <div style={{ background: 'rgba(255,255,255,.7)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backdropFilter: 'blur(12px)', borderBottom: '2px solid #dde3ff', position: 'sticky', top: 0, zIndex: 200 }}>
         <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 22, background: 'linear-gradient(135deg,#ff4d8d,#8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>OL Quiz! ⚡</span>
-        <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12, border: '1.5px solid #fbbf24' }}>⏳ Aguardando</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={() => navigate('/admin')} className="btn btn-secondary btn-sm" style={{ width: 'auto' }}>✏️ Editar</button>
+          <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12, border: '1.5px solid #fbbf24' }}>⏳ Aguardando</span>
+        </div>
       </div>
 
       <div className="screen" style={{ maxWidth: 600 }}>
@@ -162,14 +154,10 @@ export default function AdminControl() {
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
             <div className="qr-wrap"><canvas id="qr-canvas" width="180" height="180" /></div>
           </div>
-          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 10, wordBreak: 'break-all', fontWeight: 600 }}>
-            {getJoinLink(roomId)}
-          </div>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 10, wordBreak: 'break-all', fontWeight: 600 }}>{getJoinLink(roomId)}</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { navigator.clipboard.writeText(getJoinLink(roomId)); toast.success('Link copiado!') }}
-              className="btn btn-secondary btn-sm" style={{ flex: 1 }}>📋 Link</button>
-            <button onClick={() => { navigator.clipboard.writeText(roomId); toast.success('PIN copiado!') }}
-              className="btn btn-secondary btn-sm" style={{ flex: 1 }}>🔑 PIN: {roomId}</button>
+            <button onClick={() => { navigator.clipboard.writeText(getJoinLink(roomId)); toast.success('Link copiado!') }} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>📋 Link</button>
+            <button onClick={() => { navigator.clipboard.writeText(roomId); toast.success('PIN copiado!') }} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>🔑 PIN: {roomId}</button>
           </div>
         </div>
 
@@ -190,18 +178,39 @@ export default function AdminControl() {
           </div>
         </div>
 
-        {/* Questions preview */}
-        <div className="card">
-          <div className="card-title">📋 {questions.length} pergunta{questions.length !== 1 ? 's' : ''}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
-            {questions.map((q, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#f5f3ff', borderRadius: 8 }}>
-                <span style={{ fontFamily: "'Fredoka One',cursive", color: '#8b5cf6', fontSize: 12, minWidth: 24 }}>#{i + 1}</span>
-                <span style={{ flex: 1, fontWeight: 700, color: '#1e1b4b', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontSize: 13 }}>{q.pergunta}</span>
-                <span className="badge badge-purple" style={{ fontSize: 10 }}>{q.pontuacao}pts</span>
+        {/* Questions — ACCORDION */}
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <button
+            onClick={() => setQOpen(p => !p)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: '#6b7280' }}>
+                📋 {questions.length} pergunta{questions.length !== 1 ? 's' : ''}
+              </span>
+              {room.showExplain && <span className="badge badge-purple" style={{ fontSize: 10 }}>💬 explicação ativa</span>}
+              {room.autoAdvance && <span className="badge badge-green" style={{ fontSize: 10 }}>⚡ auto-avanço</span>}
+            </div>
+            <span style={{ color: '#8b5cf6', fontSize: 18, fontWeight: 700 }}>{qOpen ? '▲' : '▼'}</span>
+          </button>
+          {qOpen && (
+            <div style={{ borderTop: '2px solid #dde3ff', padding: '12px 16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+                {questions.map((q, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#f5f3ff', borderRadius: 8 }}>
+                    <span style={{ fontFamily: "'Fredoka One',cursive", color: '#8b5cf6', fontSize: 12, minWidth: 24, paddingTop: 1 }}>#{i+1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: '#1e1b4b', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontSize: 13 }}>{q.pergunta}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700, marginTop: 2 }}>
+                        {q.pontuacao}pts · {q.tempo}s · <span style={{ color: '#10b981' }}>✓ {LABELS[q.correta]}</span>
+                        {q.explicacao && <span style={{ color: '#8b5cf6' }}> · 💬</span>}
+                      </div>
+                    </div>
+                    <span className="badge badge-purple" style={{ fontSize: 10, flexShrink: 0 }}>{q.pontuacao}pts</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
 
         <button
@@ -217,33 +226,34 @@ export default function AdminControl() {
   // ── PLAYING ────────────────────────────────────────────────────────────────
   if (room.status === 'playing' && curQ) return (
     <div style={{ minHeight: '100vh', background: gameBg, display: 'flex', flexDirection: 'column' }}>
-      <LogoBar status="playing" />
-
-      {/* Progress */}
-      <div className="progress-wrap">
-        <div className="progress-fill" style={{ width: `${((cqIdx + 1) / questions.length) * 100}%` }} />
+      <div style={{ background: 'rgba(0,0,0,.2)', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 20, color: '#fff' }}>OL Quiz! ⚡</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {allAnswered && <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>✅ Todos responderam</span>}
+          <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>🔴 Ao vivo</span>
+        </div>
+        <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{cqIdx+1}/{questions.length}</span>
       </div>
 
-      {/* Timer row */}
+      <div className="progress-wrap">
+        <div className="progress-fill" style={{ width: `${((cqIdx+1)/questions.length)*100}%` }} />
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px 6px' }}>
         <div className={`timer-circle ${timerWarn ? 'warn' : ''}`} style={{ width: 56, height: 56, fontSize: 22 }}>{timer}</div>
         <div className="timer-bar-wrap" style={{ flex: 1 }}>
           <div className={`timer-bar ${timerWarn ? 'warn' : ''}`} style={{ width: `${timerPct}%` }} />
         </div>
-        <span style={{ color: 'rgba(255,255,255,.6)', fontSize: 13, fontWeight: 700 }}>{cqIdx + 1}/{questions.length}</span>
       </div>
 
-      {/* Question */}
       <div style={{ padding: '0 12px 10px' }}>
         <div className="q-card">
-          {curQ.imagem && (
-            <img src={curQ.imagem} alt="" onError={e => { e.target.style.display = 'none' }} />
-          )}
+          {curQ.imagem && <img src={curQ.imagem} alt="" onError={e => { e.target.style.display = 'none' }} />}
           <div className="q-text">{curQ.pergunta}</div>
         </div>
       </div>
 
-      {/* Answer bar chart */}
+      {/* Bar chart */}
       <div style={{ padding: '0 12px 10px' }}>
         <div style={{ background: 'rgba(0,0,0,.25)', borderRadius: 12, padding: '12px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 72, marginBottom: 6 }}>
@@ -253,7 +263,7 @@ export default function AdminControl() {
               return (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                   <span style={{ fontWeight: 800, fontSize: 13, color: '#fff' }}>{cnt}</span>
-                  <div style={{ width: '100%', height: h, background: OPT_COLORS[i], borderRadius: '4px 4px 0 0', transition: 'height .5s ease', minHeight: 6 }} />
+                  <div style={{ width: '100%', height: h, background: OPT_COLORS[i], borderRadius: '4px 4px 0 0', transition: 'height .5s', minHeight: 6 }} />
                 </div>
               )
             })}
@@ -263,7 +273,7 @@ export default function AdminControl() {
               <div key={i} style={{ flex: 1, textAlign: 'center' }}>
                 <span style={{ fontSize: 14, color: i === curQ.correta ? '#4ade80' : 'rgba(255,255,255,.7)' }}>{OPT_SHAPES[i]}</span>
                 <div style={{ fontSize: 10, color: i === curQ.correta ? '#4ade80' : 'rgba(255,255,255,.5)', fontWeight: 700, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                  {i === curQ.correta ? '✓ ' : ''}{(opt || '').slice(0, 10)}
+                  {i === curQ.correta ? '✓ ' : ''}{(opt||'').slice(0,10)}
                 </div>
               </div>
             ))}
@@ -273,53 +283,40 @@ export default function AdminControl() {
 
       {/* Answer count */}
       <div style={{ padding: '0 12px 10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,.1)', border: '2px solid rgba(255,255,255,.15)', borderRadius: 12, padding: '10px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: allAnswered ? 'rgba(34,197,94,.15)' : 'rgba(255,255,255,.1)', border: `2px solid ${allAnswered ? 'rgba(34,197,94,.4)' : 'rgba(255,255,255,.15)'}`, borderRadius: 12, padding: '10px 14px', transition: 'all .3s' }}>
           <span style={{ fontSize: 18 }}>✍️</span>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 13 }}>
-              <span style={{ color: 'rgba(255,255,255,.6)', fontWeight: 700 }}>Respostas</span>
-              <span style={{ fontFamily: "'Fredoka One',cursive", color: '#fbbf24' }}>
-                {answeredForQ.length} / {players.length}
-              </span>
+              <span style={{ color: 'rgba(255,255,255,.7)', fontWeight: 700 }}>Respostas</span>
+              <span style={{ fontFamily: "'Fredoka One',cursive", color: '#fbbf24' }}>{answeredForQ.length} / {players.length}</span>
             </div>
             <div style={{ height: 8, background: 'rgba(255,255,255,.2)', borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: '#fbbf24', borderRadius: 99, transition: 'width .4s' }} />
+              <div style={{ height: '100%', width: `${pct}%`, background: allAnswered ? '#22c55e' : '#fbbf24', borderRadius: 99, transition: 'width .4s, background .3s' }} />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Controls */}
       <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {cqIdx < questions.length - 1
-          ? <button onClick={() => updateDoc(doc(db, 'rooms', roomId), { currentQuestion: cqIdx + 1 })}
-              className="btn btn-white" style={{ fontSize: 16 }}>
-              Próxima pergunta →
-            </button>
-          : <button onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'finished' }).then(() => navigate(`/room/${roomId}/podium`))}
-              className="btn btn-success" style={{ fontSize: 16 }}>
-              🏁 Encerrar e ver pódio
-            </button>
+          ? <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { currentQuestion: cqIdx + 1 }) }}
+              className="btn btn-white" style={{ fontSize: 16 }}>Próxima pergunta →</button>
+          : <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { status: 'finished' }).then(() => navigate(`/room/${roomId}/podium`)) }}
+              className="btn btn-success" style={{ fontSize: 16 }}>🏁 Encerrar e ver pódio</button>
         }
-        <button onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })}
-          className="btn btn-danger btn-sm">⏹ Encerrar agora</button>
+        <button onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })} className="btn btn-danger btn-sm">⏹ Encerrar agora</button>
       </div>
 
-      {/* Live ranking */}
       <div style={{ padding: '0 12px 28px' }}>
-        <div style={{ fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.45)', marginBottom: 8 }}>
-          📊 Ranking ao vivo
-        </div>
+        <div style={{ fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.45)', marginBottom: 8 }}>📊 Ranking ao vivo</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {players.slice(0, 5).map((p, i) => (
-            <RankItem key={p.id} rank={i + 1} player={p} delay={i * 50} />
-          ))}
+          {players.slice(0, 5).map((p, i) => <RankItem key={p.id} rank={i+1} player={p} delay={i*50} />)}
         </div>
       </div>
     </div>
   )
 
-  // ── FINISHED ───────────────────────────────────────────────────────────────
+  // ── FINISHED ────────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', background: lightBg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px', gap: 14 }}>
       <div style={{ textAlign: 'center', marginBottom: 8 }}>
