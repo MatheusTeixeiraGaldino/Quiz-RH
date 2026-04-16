@@ -11,10 +11,10 @@ const DEFAULT_Q = {
   correta: 0, pontuacao: 100, tempo: 30, imagem: '', explicacao: '',
 }
 
-function Toggle({ value, onChange, label, sub }) {
+function Toggle({ value, onChange, label, sub, disabled }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 12px', background: value ? '#f5f3ff' : '#fafafa', borderRadius: 10, border: `2px solid ${value ? '#c4b5fd' : '#e5e7eb'}`, transition: 'all .2s' }}>
-      <div onClick={onChange} style={{ width: 44, height: 24, borderRadius: 99, background: value ? '#8b5cf6' : '#d1d5db', position: 'relative', flexShrink: 0, transition: 'background .2s' }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: disabled ? 'not-allowed' : 'pointer', padding: '10px 12px', background: value ? '#f5f3ff' : '#fafafa', borderRadius: 10, border: `2px solid ${value ? '#c4b5fd' : '#e5e7eb'}`, transition: 'all .2s', opacity: disabled ? .5 : 1 }}>
+      <div onClick={disabled ? undefined : onChange} style={{ width: 44, height: 24, borderRadius: 99, background: value ? '#8b5cf6' : '#d1d5db', position: 'relative', flexShrink: 0, transition: 'background .2s' }}>
         <div style={{ position: 'absolute', top: 3, left: value ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
       </div>
       <div>
@@ -88,7 +88,7 @@ function QuestionForm({ onSave, onCancel, initial }) {
         )}
       </div>
       <div style={{ marginBottom: 12 }}>
-        <label className="lbl">💬 Explicação da resposta <span style={{ fontSize: 10, textTransform: 'none', color: '#a78bfa', fontWeight: 600 }}>(opcional)</span></label>
+        <label className="lbl">💬 Explicação <span style={{ fontSize: 10, textTransform: 'none', color: '#a78bfa', fontWeight: 600 }}>(opcional — exibida após responder)</span></label>
         <textarea value={q.explicacao || ''} onChange={e => set('explicacao', e.target.value)} placeholder="Ex: A resposta correta é A porque…" rows={2} className="inp" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
@@ -113,10 +113,56 @@ function QuestionForm({ onSave, onCancel, initial }) {
   )
 }
 
+// Email chip input for sharing
+function EmailChips({ emails, onChange }) {
+  const [input, setInput] = useState('')
+
+  const add = () => {
+    const v = input.trim().toLowerCase()
+    if (!v) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return toast.error('E-mail inválido')
+    if (emails.includes(v)) return toast.error('E-mail já adicionado')
+    onChange([...emails, v])
+    setInput('')
+  }
+
+  const remove = (e) => onChange(emails.filter(x => x !== e))
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, minHeight: 32 }}>
+        {emails.map(e => (
+          <div key={e} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#ede9fe', borderRadius: 99, padding: '4px 10px', fontSize: 12, fontWeight: 800, color: '#5b21b6' }}>
+            <span>👤 {e}</span>
+            <button onClick={() => remove(e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8b5cf6', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+          </div>
+        ))}
+        {emails.length === 0 && <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600, lineHeight: 2 }}>Nenhum usuário adicionado</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add() } }}
+          placeholder="email@exemplo.com"
+          className="inp"
+          style={{ flex: 1, fontSize: 13 }}
+          type="email"
+        />
+        <button onClick={add} className="btn btn-secondary btn-sm" style={{ flexShrink: 0 }}>+ Adicionar</button>
+      </div>
+      <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, marginTop: 4 }}>
+        Pressione Enter ou vírgula para adicionar
+      </div>
+    </div>
+  )
+}
+
 export default function AdminCreate() {
   const navigate = useNavigate()
   const user     = useStore(s => s.user)
   const account  = useStore(s => s.account)
+  const isLoggedIn = account && user && !user.isAnonymous
 
   const [roomName,     setRoomName]     = useState('')
   const [questions,    setQuestions]    = useState([])
@@ -129,7 +175,10 @@ export default function AdminCreate() {
   const [showExplain,  setShowExplain]  = useState(false)
   const [explainTime,  setExplainTime]  = useState(8)
   const [visibility,   setVisibility]   = useState('private')
+  // Template options — only for logged-in users
   const [saveTemplate, setSaveTemplate] = useState(false)
+  const [tplAccess,    setTplAccess]    = useState('private') // 'private' | 'global' | 'shared'
+  const [sharedWith,   setSharedWith]   = useState([]) // list of emails
   const fileRef = useRef()
 
   React.useEffect(() => {
@@ -139,17 +188,16 @@ export default function AdminCreate() {
         const t = JSON.parse(raw)
         if (t.nome) setRoomName(t.nome)
         if (Array.isArray(t.perguntas)) setQuestions(t.perguntas)
-        if (t.visibility) setVisibility(t.visibility)
         localStorage.removeItem('ql_template')
         toast.success('Template carregado! ✅')
       } catch (e) {}
     }
   }, [])
 
-  const addQ    = (q) => { setQuestions(p => [...p, q]); setAdding(false); toast.success('Pergunta adicionada! ✅') }
+  const addQ     = (q) => { setQuestions(p => [...p, q]); setAdding(false); toast.success('Pergunta adicionada! ✅') }
   const saveEdit = (q) => { setQuestions(p => p.map((o, i) => i === editIdx ? q : o)); setEditIdx(null); toast.success('Atualizada! ✅') }
-  const delQ    = (i) => { setQuestions(p => p.filter((_, j) => j !== i)) }
-  const moveQ   = (i, d) => {
+  const delQ     = (i) => { setQuestions(p => p.filter((_, j) => j !== i)) }
+  const moveQ    = (i, d) => {
     setQuestions(p => {
       const a = [...p]; const j = i + d
       if (j < 0 || j >= a.length) return a
@@ -159,7 +207,7 @@ export default function AdminCreate() {
 
   const exportJSON = () => {
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([JSON.stringify({ nome: roomName, perguntas: questions, visibility }, null, 2)], { type: 'application/json' }))
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ nome: roomName, perguntas: questions }, null, 2)], { type: 'application/json' }))
     a.download = `olquiz-${roomName || 'quiz'}.json`
     a.click(); toast.success('Quiz exportado!')
   }
@@ -171,7 +219,6 @@ export default function AdminCreate() {
         const d = JSON.parse(ev.target.result)
         if (d.nome) setRoomName(d.nome)
         if (Array.isArray(d.perguntas)) { setQuestions(d.perguntas); toast.success(`${d.perguntas.length} perguntas importadas!`) }
-        if (d.visibility) setVisibility(d.visibility)
       } catch { toast.error('Arquivo inválido') }
     }
     r.readAsText(f); e.target.value = ''
@@ -192,15 +239,22 @@ export default function AdminCreate() {
         visibility,
       })
 
-      // Save template: for any user if they checked the option OR if visibility is global
-      if (saveTemplate || visibility === 'global') {
+      // Save template — ONLY for logged-in (non-anonymous) users
+      if (saveTemplate && isLoggedIn) {
         await addDoc(collection(db, 'templates'), {
-          nome: roomName, perguntas: questions,
-          visibility: visibility === 'global' ? 'global' : 'private',
-          ownerUid: user?.uid || 'anonymous',
-          ownerEmail: account?.email || null,
+          nome: roomName,
+          perguntas: questions,
+          ownerUid: user.uid,
+          ownerEmail: account.email,
+          // Access control:
+          // 'private'  → only owner sees it
+          // 'global'   → all authenticated users see it
+          // 'shared'   → owner + specific emails in sharedWith[]
+          tplAccess,
+          sharedWith: tplAccess === 'shared' ? sharedWith : [],
           criadoEm: serverTimestamp(),
         })
+        toast.success('Template salvo! 💾')
       }
 
       for (let i = 0; i < questions.length; i++) {
@@ -215,6 +269,12 @@ export default function AdminCreate() {
     } finally { setCreating(false) }
   }
 
+  const ACCESS_OPTIONS = [
+    { v: 'private', icon: '🔒', label: 'Somente eu',    desc: 'Só você pode ver e usar' },
+    { v: 'global',  icon: '🌍', label: 'Todos os admins', desc: 'Qualquer admin logado acessa' },
+    { v: 'shared',  icon: '👥', label: 'Usuários específicos', desc: 'Somente quem você adicionar' },
+  ]
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#fce7f3,#ede9fe,#dbeafe)' }}>
       <div style={{ background: 'rgba(255,255,255,.7)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backdropFilter: 'blur(12px)', borderBottom: '2px solid #dde3ff', position: 'sticky', top: 0, zIndex: 200 }}>
@@ -223,26 +283,13 @@ export default function AdminCreate() {
       </div>
 
       <div className="screen" style={{ maxWidth: 700 }}>
+
         {/* Name */}
         <div className="card">
           <div className="card-title">⚙️ Configurar sala</div>
           <div>
             <label className="lbl">Nome da sala</label>
             <input value={roomName} onChange={e => setRoomName(e.target.value)} placeholder="Ex: Trivia de Ciências — Turma B" className="inp" />
-          </div>
-        </div>
-
-        {/* Visibility */}
-        <div className="card">
-          <div className="card-title">🔐 Visibilidade</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {[['private','🔒 Privado','Só você acessa'], ['global','🌍 Global','Qualquer admin usa']].map(([v, label, desc]) => (
-              <button key={v} onClick={() => setVisibility(v)}
-                style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: `2px solid ${visibility === v ? '#8b5cf6' : '#dde3ff'}`, background: visibility === v ? '#f5f3ff' : '#fff', cursor: 'pointer', fontFamily: "'Nunito',sans-serif", textAlign: 'left', transition: 'all .2s' }}>
-                <div style={{ fontWeight: 800, fontSize: 14, color: visibility === v ? '#5b21b6' : '#1e1b4b' }}>{label}</div>
-                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2, fontWeight: 600 }}>{desc}</div>
-              </button>
-            ))}
           </div>
         </div>
 
@@ -269,8 +316,60 @@ export default function AdminCreate() {
                 </select>
               </div>
             )}
-            <Toggle value={saveTemplate} onChange={() => setSaveTemplate(p => !p)} label="💾 Salvar como template" sub="Permite reutilizar este quiz depois em Templates" />
           </div>
+        </div>
+
+        {/* Template section — only shown to logged-in users */}
+        <div className="card">
+          <div className="card-title">💾 Salvar como template</div>
+          {!isLoggedIn ? (
+            <div style={{ padding: '12px 14px', background: '#fef3c7', borderRadius: 10, border: '1.5px solid #fbbf24', fontSize: 14, fontWeight: 700, color: '#92400e' }}>
+              🔐 Faça{' '}
+              <button onClick={() => navigate('/login')} style={{ color: '#8b5cf6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, textDecoration: 'underline', fontSize: 14 }}>
+                login
+              </button>
+              {' '}para salvar e reutilizar este quiz como template.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Toggle value={saveTemplate} onChange={() => setSaveTemplate(p => !p)} label="Salvar este quiz como template" sub="Você poderá reutilizá-lo em outros quizzes" />
+
+              {saveTemplate && (
+                <>
+                  {/* Access level */}
+                  <div>
+                    <label className="lbl">Quem pode ver este template?</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {ACCESS_OPTIONS.map(({ v, icon, label, desc }) => (
+                        <button key={v} onClick={() => setTplAccess(v)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, border: `2px solid ${tplAccess === v ? '#8b5cf6' : '#e5e7eb'}`, background: tplAccess === v ? '#f5f3ff' : '#fff', cursor: 'pointer', fontFamily: "'Nunito',sans-serif", textAlign: 'left', transition: 'all .2s', width: '100%' }}>
+                          <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: 14, color: tplAccess === v ? '#5b21b6' : '#1e1b4b' }}>{label}</div>
+                            <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, marginTop: 1 }}>{desc}</div>
+                          </div>
+                          {tplAccess === v && <span style={{ marginLeft: 'auto', color: '#8b5cf6', fontWeight: 800 }}>✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Email list — only shown when 'shared' is selected */}
+                  {tplAccess === 'shared' && (
+                    <div>
+                      <label className="lbl">E-mails dos usuários autorizados</label>
+                      <EmailChips emails={sharedWith} onChange={setSharedWith} />
+                      {sharedWith.length === 0 && (
+                        <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', borderRadius: 8, border: '1.5px solid #fbbf24', fontSize: 12, fontWeight: 700, color: '#92400e' }}>
+                          ⚠️ Adicione ao menos um e-mail para compartilhamento funcionar
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Import/Export */}
@@ -299,7 +398,7 @@ export default function AdminCreate() {
                       <div style={{ fontSize: 11, color: '#6b7280', marginTop: 3, display: 'flex', gap: 8, flexWrap: 'wrap', fontWeight: 700 }}>
                         <span>{q.pontuacao}pts · {q.tempo}s</span>
                         <span style={{ color: '#10b981' }}>✓ {LABELS[q.correta]}: {(q.opcoes[q.correta]||'').slice(0,20)}</span>
-                        {q.explicacao && <span style={{ color: '#8b5cf6' }}>💬 explicação</span>}
+                        {q.explicacao && <span style={{ color: '#8b5cf6' }}>💬</span>}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>

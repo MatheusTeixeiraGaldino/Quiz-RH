@@ -4,10 +4,10 @@ service cloud.firestore {
 
     // Rooms
     match /rooms/{roomId} {
-      allow read:   if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
-      allow delete: if false;
+      allow read:           if request.auth != null;
+      allow create:         if request.auth != null;
+      allow update:         if request.auth != null;
+      allow delete:         if false;
     }
 
     // Questions
@@ -22,7 +22,7 @@ service cloud.firestore {
       allow read:           if request.auth != null;
       allow create, update: if request.auth != null
                                && request.auth.uid == playerId;
-      allow delete: if false;
+      allow delete:         if false;
     }
 
     // Answers
@@ -34,17 +34,35 @@ service cloud.firestore {
     }
 
     // Templates
-    // Global: anyone authenticated can read
-    // Private: only owner can read
-    // Create: authenticated non-anonymous users only
+    // Access levels (tplAccess field):
+    //   'private' → only the owner (ownerUid) can read
+    //   'global'  → any authenticated non-anonymous user can read
+    //   'shared'  → owner + any user whose email is in sharedWith[]
+    //
+    // Create/Delete: only authenticated non-anonymous users (isAnonymous=false)
     match /templates/{templateId} {
-      allow read: if request.auth != null
-                     && (resource.data.visibility == 'global'
-                         || resource.data.ownerUid == request.auth.uid);
 
+      allow read: if request.auth != null
+                     && (
+                       // Owner always can read their own
+                       resource.data.ownerUid == request.auth.uid
+                       ||
+                       // Global: any non-anonymous user
+                       (resource.data.tplAccess == 'global'
+                        && request.auth.token.firebase.sign_in_provider != 'anonymous')
+                       ||
+                       // Shared: user's email is in the sharedWith array
+                       (resource.data.tplAccess == 'shared'
+                        && request.auth.token.email != null
+                        && request.auth.token.email in resource.data.sharedWith)
+                     );
+
+      // Only non-anonymous logged-in users can create templates
       allow create: if request.auth != null
+                       && request.auth.token.firebase.sign_in_provider != 'anonymous'
                        && request.resource.data.ownerUid == request.auth.uid;
 
+      // Only the owner can update or delete their own templates
       allow update, delete: if request.auth != null
                                && resource.data.ownerUid == request.auth.uid;
     }
