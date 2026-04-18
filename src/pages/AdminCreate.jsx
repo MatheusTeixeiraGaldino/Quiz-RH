@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, setDoc, doc, serverTimestamp, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useStore } from '../store'
 import { Badge, OPT_COLORS, LABELS, generateRoomCode } from '../components/UI'
@@ -113,46 +113,67 @@ function QuestionForm({ onSave, onCancel, initial }) {
   )
 }
 
-// Email chip input for sharing
-function EmailChips({ emails, onChange }) {
-  const [input, setInput] = useState('')
+// User dropdown selector (replaces EmailChips)
+function UserSelector({ selectedUids, onChange }) {
+  const [allUsers, setAllUsers] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const add = () => {
-    const v = input.trim().toLowerCase()
-    if (!v) return
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return toast.error('E-mail inválido')
-    if (emails.includes(v)) return toast.error('E-mail já adicionado')
-    onChange([...emails, v])
-    setInput('')
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'users'))
+        const users = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+        setAllUsers(users)
+      } catch (e) {
+        console.error(e)
+        toast.error('Erro ao carregar usuários')
+      }
+      setLoading(false)
+    }
+    loadUsers()
+  }, [])
+
+  const toggle = (uid) => {
+    if (selectedUids.includes(uid)) {
+      onChange(selectedUids.filter(x => x !== uid))
+    } else {
+      onChange([...selectedUids, uid])
+    }
   }
 
-  const remove = (e) => onChange(emails.filter(x => x !== e))
+  if (loading) return <div style={{ textAlign: 'center', padding: 20 }}><div className="spinner" style={{ width: 24, height: 24, borderWidth: 3 }} /></div>
+
+  if (allUsers.length === 0) {
+    return (
+      <div style={{ padding: '12px 14px', background: '#fef3c7', borderRadius: 10, border: '1.5px solid #fbbf24', fontSize: 13, fontWeight: 700, color: '#92400e' }}>
+        ℹ️ Nenhum usuário cadastrado no sistema ainda. Quando outros usuários fizerem login, eles aparecerão aqui.
+      </div>
+    )
+  }
 
   return (
     <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, minHeight: 32 }}>
-        {emails.map(e => (
-          <div key={e} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#ede9fe', borderRadius: 99, padding: '4px 10px', fontSize: 12, fontWeight: 800, color: '#5b21b6' }}>
-            <span>👤 {e}</span>
-            <button onClick={() => remove(e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8b5cf6', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
-          </div>
-        ))}
-        {emails.length === 0 && <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600, lineHeight: 2 }}>Nenhum usuário adicionado</span>}
+      <div style={{ maxHeight: 240, overflowY: 'auto', border: '2px solid #e5e7eb', borderRadius: 10, padding: 8 }}>
+        {allUsers.map(u => {
+          const selected = selectedUids.includes(u.uid)
+          return (
+            <label key={u.uid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background .2s', background: selected ? '#f5f3ff' : 'transparent' }}>
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => toggle(u.uid)}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: '#1e1b4b' }}>{u.name || 'Sem nome'}</div>
+                <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>{u.email}</div>
+              </div>
+            </label>
+          )
+        })}
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add() } }}
-          placeholder="email@exemplo.com"
-          className="inp"
-          style={{ flex: 1, fontSize: 13 }}
-          type="email"
-        />
-        <button onClick={add} className="btn btn-secondary btn-sm" style={{ flexShrink: 0 }}>+ Adicionar</button>
-      </div>
-      <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, marginTop: 4 }}>
-        Pressione Enter ou vírgula para adicionar
+      <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+        {selectedUids.length === 0 ? 'Nenhum usuário selecionado' : `${selectedUids.length} usuário${selectedUids.length > 1 ? 's' : ''} selecionado${selectedUids.length > 1 ? 's' : ''}`}
       </div>
     </div>
   )
@@ -174,11 +195,9 @@ export default function AdminCreate() {
   const [autoAdvance,  setAutoAdvance]  = useState(false)
   const [showExplain,  setShowExplain]  = useState(false)
   const [explainTime,  setExplainTime]  = useState(8)
-  const [visibility,   setVisibility]   = useState('private')
-  // Template options — only for logged-in users
   const [saveTemplate, setSaveTemplate] = useState(false)
-  const [tplAccess,    setTplAccess]    = useState('private') // 'private' | 'global' | 'shared'
-  const [sharedWith,   setSharedWith]   = useState([]) // list of emails
+  const [tplAccess,    setTplAccess]    = useState('private')
+  const [sharedWith,   setSharedWith]   = useState([]) // array of uids (not emails)
   const fileRef = useRef()
 
   React.useEffect(() => {
@@ -236,7 +255,6 @@ export default function AdminCreate() {
         totalQuestions: questions.length,
         autoMode, autoInterval, autoAdvance,
         showExplain, explainTime,
-        visibility,
       })
 
       // Save template — ONLY for logged-in (non-anonymous) users
@@ -246,10 +264,7 @@ export default function AdminCreate() {
           perguntas: questions,
           ownerUid: user.uid,
           ownerEmail: account.email,
-          // Access control:
-          // 'private'  → only owner sees it
-          // 'global'   → all authenticated users see it
-          // 'shared'   → owner + specific emails in sharedWith[]
+          ownerName: account.displayName || account.email,
           tplAccess,
           sharedWith: tplAccess === 'shared' ? sharedWith : [],
           criadoEm: serverTimestamp(),
@@ -272,7 +287,7 @@ export default function AdminCreate() {
   const ACCESS_OPTIONS = [
     { v: 'private', icon: '🔒', label: 'Somente eu',    desc: 'Só você pode ver e usar' },
     { v: 'global',  icon: '🌍', label: 'Todos os admins', desc: 'Qualquer admin logado acessa' },
-    { v: 'shared',  icon: '👥', label: 'Usuários específicos', desc: 'Somente quem você adicionar' },
+    { v: 'shared',  icon: '👥', label: 'Usuários específicos', desc: 'Somente quem você selecionar' },
   ]
 
   return (
@@ -309,17 +324,14 @@ export default function AdminCreate() {
             <Toggle value={autoAdvance} onChange={() => setAutoAdvance(p => !p)} label="Avançar quando todos responderem" sub="Passa automaticamente sem esperar o tempo acabar" />
             <Toggle value={showExplain} onChange={() => setShowExplain(p => !p)} label="Mostrar resposta e explicação" sub="Exibe a resposta certa e explicação após cada pergunta" />
             {showExplain && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 12 }}>
-                <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 700 }}>Tempo da explicação:</span>
-                <select value={explainTime} onChange={e => setExplainTime(Number(e.target.value))} className="inp" style={{ width: 'auto' }}>
-                  {[5,8,10,15,20,30].map(v => <option key={v} value={v}>{v}s</option>)}
-                </select>
+              <div style={{ paddingLeft: 12, fontSize: 12, color: '#6b7280', fontWeight: 700, fontStyle: 'italic' }}>
+                ℹ️ A explicação aparecerá na tela do admin e dos participantes. O admin controla quando avançar (sem timer automático).
               </div>
             )}
           </div>
         </div>
 
-        {/* Template section — only shown to logged-in users */}
+        {/* Template section — only for logged-in users */}
         <div className="card">
           <div className="card-title">💾 Salvar como template</div>
           {!isLoggedIn ? (
@@ -336,7 +348,6 @@ export default function AdminCreate() {
 
               {saveTemplate && (
                 <>
-                  {/* Access level */}
                   <div>
                     <label className="lbl">Quem pode ver este template?</label>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -354,14 +365,13 @@ export default function AdminCreate() {
                     </div>
                   </div>
 
-                  {/* Email list — only shown when 'shared' is selected */}
                   {tplAccess === 'shared' && (
                     <div>
-                      <label className="lbl">E-mails dos usuários autorizados</label>
-                      <EmailChips emails={sharedWith} onChange={setSharedWith} />
+                      <label className="lbl">Selecione os usuários autorizados</label>
+                      <UserSelector selectedUids={sharedWith} onChange={setSharedWith} />
                       {sharedWith.length === 0 && (
                         <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', borderRadius: 8, border: '1.5px solid #fbbf24', fontSize: 12, fontWeight: 700, color: '#92400e' }}>
-                          ⚠️ Adicione ao menos um e-mail para compartilhamento funcionar
+                          ⚠️ Selecione ao menos um usuário para compartilhamento funcionar
                         </div>
                       )}
                     </div>

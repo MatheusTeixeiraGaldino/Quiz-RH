@@ -33,13 +33,28 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Users
+    // Stores profile info (name, email) for all non-anonymous users
+    // Used for sharing templates with specific users by selecting from dropdown
+    match /users/{userId} {
+      // Anyone authenticated can read (to populate dropdown)
+      allow read: if request.auth != null;
+      
+      // Only the user can create/update their own profile
+      allow create, update: if request.auth != null
+                               && request.auth.uid == userId
+                               && request.auth.token.firebase.sign_in_provider != 'anonymous';
+      
+      allow delete: if false;
+    }
+
     // Templates
     // Access levels (tplAccess field):
     //   'private' → only the owner (ownerUid) can read
     //   'global'  → any authenticated non-anonymous user can read
-    //   'shared'  → owner + any user whose email is in sharedWith[]
+    //   'shared'  → owner + any user whose uid is in sharedWith[]
     //
-    // Create/Delete: only authenticated non-anonymous users (isAnonymous=false)
+    // Create/Delete: only authenticated non-anonymous users
     match /templates/{templateId} {
 
       allow read: if request.auth != null
@@ -51,10 +66,9 @@ service cloud.firestore {
                        (resource.data.tplAccess == 'global'
                         && request.auth.token.firebase.sign_in_provider != 'anonymous')
                        ||
-                       // Shared: user's email is in the sharedWith array
+                       // Shared: user's uid is in the sharedWith array
                        (resource.data.tplAccess == 'shared'
-                        && request.auth.token.email != null
-                        && request.auth.token.email in resource.data.sharedWith)
+                        && request.auth.uid in resource.data.sharedWith)
                      );
 
       // Only non-anonymous logged-in users can create templates

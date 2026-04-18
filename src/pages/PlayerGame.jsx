@@ -17,17 +17,14 @@ export default function PlayerGame() {
 
   const [room,      setRoom]      = useState(null)
   const [questions, setQuestions] = useState([])
-  const [answered,  setAnswered]  = useState({})   // questionId -> idx
+  const [answered,  setAnswered]  = useState({})
   const [myScore,   setMyScore]   = useState(0)
   const [timer,     setTimer]     = useState(30)
-  // phase: 'question' | 'feedback' | 'explanation'
-  const [phase,     setPhase]     = useState('question')
+  const [phase,     setPhase]     = useState('question') // 'question' | 'feedback' | 'explanation'
   const [lastPts,   setLastPts]   = useState(0)
   const [streak,    setStreak]    = useState(0)
-  const [explTimer, setExplTimer] = useState(0)
 
   const timerRef    = useRef(null)
-  const explRef     = useRef(null)
   const lastQIdxRef = useRef(-1)
   const roomRef     = useRef(null)
   const questionsRef = useRef([])
@@ -62,37 +59,50 @@ export default function PlayerGame() {
     )
   }, [roomId, playerId])
 
-  // ── Timer ──────────────────────────────────────────────────────────────────
+  // ── Timer (only runs during 'question' phase, NOT during 'explanation') ────
   useEffect(() => {
     if (!room || !questions.length) return
     if (room.status !== 'playing') { clearInterval(timerRef.current); return }
+    
+    // Timer ONLY runs when phase is 'question' or undefined
+    const isQuestion = !room.phase || room.phase === 'question'
+    if (!isQuestion) {
+      clearInterval(timerRef.current)
+      return
+    }
+
     const cqIdx = room.currentQuestion ?? 0
     const cq    = questions[cqIdx]
     if (!cq) return
-    if (lastQIdxRef.current === cqIdx) return
+
+    // Reset timer only when question changes AND we're in question phase
+    if (lastQIdxRef.current === cqIdx && room.phase === 'question') return
     lastQIdxRef.current = cqIdx
 
     clearInterval(timerRef.current)
-    clearInterval(explRef.current)
     setPhase('question')
     setTimer(cq.tempo || 30)
 
     timerRef.current = setInterval(() => {
       setTimer(t => { if (t <= 1) { clearInterval(timerRef.current); return 0 } return t - 1 })
     }, 1000)
-    return () => { clearInterval(timerRef.current); clearInterval(explRef.current) }
-  }, [room?.currentQuestion, room?.status, questions.length])
+    return () => clearInterval(timerRef.current)
+  }, [room?.currentQuestion, room?.status, room?.phase, questions.length])
 
-  // ── Explanation countdown ──────────────────────────────────────────────────
-  const startExplTimer = useCallback((duration) => {
-    clearInterval(explRef.current)
-    setExplTimer(duration)
-    explRef.current = setInterval(() => {
-      setExplTimer(t => { if (t <= 1) { clearInterval(explRef.current); return 0 } return t - 1 })
-    }, 1000)
-  }, [])
+  // ── Sync phase with room.phase ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!room) return
+    if (room.phase === 'explanation') {
+      setPhase('explanation')
+    } else if (room.phase === 'question' || !room.phase) {
+      // Only go back to question if we're not in feedback
+      if (phase === 'explanation') {
+        setPhase('question')
+      }
+    }
+  }, [room?.phase])
 
-  useEffect(() => () => { clearInterval(timerRef.current); clearInterval(explRef.current) }, [])
+  useEffect(() => () => clearInterval(timerRef.current), [])
 
   // ── Answer ─────────────────────────────────────────────────────────────────
   const answer = useCallback(async (idx) => {
@@ -109,17 +119,7 @@ export default function PlayerGame() {
     setAnswered(prev => ({ ...prev, [q.id]: idx }))
     setLastPts(pts)
     if (isCorrect) setStreak(s => s + 1); else setStreak(0)
-
-    // Show feedback first, then explanation if enabled
     setPhase('feedback')
-
-    if (r.showExplain) {
-      // After 2.5s feedback, show explanation
-      setTimeout(() => {
-        setPhase('explanation')
-        startExplTimer(r.explainTime || 8)
-      }, 2500)
-    }
 
     // Sound
     if (soundEnabled) {
@@ -147,7 +147,7 @@ export default function PlayerGame() {
         if (pts > 0) await updateDoc(doc(db, 'players', playerId), { score: increment(pts) })
       }
     } catch(e) { console.error(e) }
-  }, [answered, timer, playerId, roomId, soundEnabled, startExplTimer])
+  }, [answered, timer, playerId, roomId, soundEnabled])
 
   // ── Guards ─────────────────────────────────────────────────────────────────
   if (!room || questions.length === 0) return (
@@ -165,7 +165,6 @@ export default function PlayerGame() {
 
     return (
       <div className="game-bg" style={{ minHeight:'100vh', display:'flex', flexDirection:'column' }}>
-        {/* Header */}
         <div style={{ background:'rgba(0,0,0,.2)', padding:'14px 16px', textAlign:'center' }}>
           <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:22, color:'#fff' }}>OL Quiz! ⚡</div>
         </div>
@@ -195,7 +194,7 @@ export default function PlayerGame() {
           {/* Per-question breakdown */}
           <div style={{ marginBottom:16 }}>
             <div style={{ fontWeight:800, fontSize:13, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:10 }}>
-              Resumo por pergunta
+              📋 Resumo por pergunta
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {questions.map((q, i) => {
@@ -264,7 +263,7 @@ export default function PlayerGame() {
   const timerWarn = timer <= 5
   const timerPct  = Math.max(0, (timer / (q.tempo || 30)) * 100)
 
-  // ── EXPLANATION PHASE ──────────────────────────────────────────────────────
+  // ── EXPLANATION PHASE (synced with room.phase) ─────────────────────────────
   if (phase === 'explanation') {
     return (
       <div style={{ minHeight:'100vh', background:'linear-gradient(160deg,#1e1b4b,#312e81)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24, textAlign:'center', gap:16 }}>
@@ -280,8 +279,8 @@ export default function PlayerGame() {
             <div style={{ fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:600, fontStyle:'italic' }}>Sem explicação cadastrada</div>
           )}
         </div>
-        <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:18, color:'rgba(255,255,255,.5)' }}>
-          Próxima em {explTimer}s…
+        <div style={{ fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:700, fontStyle:'italic' }}>
+          Aguardando o admin avançar…
         </div>
         <div className="score-box" style={{ width:200, marginTop:4 }}>
           <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:2 }}>Total</div>
@@ -312,11 +311,10 @@ export default function PlayerGame() {
           <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.55)', marginBottom:2 }}>Total</div>
           <div className="score-num">{myScore.toLocaleString('pt-BR')}</div>
         </div>
-        {!room.showExplain && (
+        {room.showExplain ? (
+          <p style={{ color:'rgba(255,255,255,.45)', fontSize:13, fontWeight:700, marginTop:4 }}>Aguardando explicação…</p>
+        ) : (
           <p style={{ color:'rgba(255,255,255,.45)', fontSize:13, fontWeight:700, marginTop:4 }}>Aguardando próxima pergunta…</p>
-        )}
-        {room.showExplain && (
-          <p style={{ color:'rgba(255,255,255,.45)', fontSize:13, fontWeight:700, marginTop:4 }}>Carregando explicação…</p>
         )}
       </div>
     )
