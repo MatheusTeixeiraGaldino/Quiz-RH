@@ -1,11 +1,13 @@
 import React, { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
-import { auth } from './firebase'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { auth, db } from './firebase'
 import { useStore } from './store'
 
 import Home from './pages/Home'
 import Login from './pages/Login'
+import Profile from './pages/Profile'
 import AdminCreate from './pages/AdminCreate'
 import AdminControl from './pages/AdminControl'
 import PlayerJoin from './pages/PlayerJoin'
@@ -30,9 +32,33 @@ export default function App() {
         } catch (e) { console.error('Auth error', e) }
       } else {
         setUser(user)
-        // If not anonymous, set as account
+        
+        // If not anonymous, set as account and ensure user exists in Firestore
         if (!user.isAnonymous) {
-          setAccount({ uid: user.uid, email: user.email, displayName: user.displayName })
+          // Check if user exists in Firestore
+          const userRef = doc(db, 'users', user.uid)
+          const userSnap = await getDoc(userRef)
+          
+          if (!userSnap.exists()) {
+            // Create user document if it doesn't exist (for existing users before this update)
+            await setDoc(userRef, {
+              name: user.displayName || user.email,
+              email: user.email,
+              createdAt: serverTimestamp(),
+            })
+          }
+          
+          // Get name from Firestore (most up-to-date)
+          const userData = userSnap.exists() ? userSnap.data() : null
+          const displayName = userData?.name || user.displayName || user.email
+          
+          setAccount({ 
+            uid: user.uid, 
+            email: user.email, 
+            displayName 
+          })
+        } else {
+          setAccount(null)
         }
       }
     })
@@ -43,6 +69,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/profile" element={<Profile />} />
       <Route path="/admin" element={<AdminCreate />} />
       <Route path="/templates" element={<QuizTemplates />} />
       <Route path="/room/:roomId/control" element={<AdminControl />} />

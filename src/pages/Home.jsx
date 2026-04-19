@@ -28,7 +28,29 @@ export default function Home() {
         </span>
         {account
           ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280' }}>{account.email}</span>
+              <button 
+                onClick={() => navigate('/profile')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 6,
+                  padding: '6px 12px',
+                  background: '#f5f3ff',
+                  border: '2px solid #dde3ff',
+                  borderRadius: 99,
+                  cursor: 'pointer',
+                  fontFamily: "'Nunito',sans-serif",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  color: '#5b21b6',
+                  transition: 'all .2s'
+                }}
+                onMouseEnter={e => { e.target.style.background = '#ede9fe'; e.target.style.borderColor = '#c4b5fd' }}
+                onMouseLeave={e => { e.target.style.background = '#f5f3ff'; e.target.style.borderColor = '#dde3ff' }}
+              >
+                <span>👤</span>
+                <span>{account.displayName || account.email}</span>
+              </button>
               <button onClick={() => navigate('/admin')} className="btn btn-primary btn-sm" style={{ width: 'auto' }}>
                 + Criar quiz
               </button>

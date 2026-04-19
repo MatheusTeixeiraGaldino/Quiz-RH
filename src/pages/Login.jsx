@@ -4,8 +4,10 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInAnonymously,
+  updateProfile,
 } from 'firebase/auth'
-import { auth } from '../firebase'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { auth, db } from '../firebase'
 import { useStore } from '../store'
 import toast from 'react-hot-toast'
 
@@ -29,12 +31,19 @@ export default function Login() {
   const [tab, setTab]       = useState('login')
   const [email, setEmail]   = useState('')
   const [pass, setPass]     = useState('')
+  const [name, setName]     = useState('') // NEW: name field for registration
   const [loading, setLoading] = useState(false)
   const [showSetup, setShowSetup] = useState(false)
 
   const handleAuth = async () => {
     if (!email.trim() || !pass.trim()) return toast.error('Preencha e-mail e senha')
     if (pass.length < 6) return toast.error('Senha mínima: 6 caracteres')
+    
+    // Validate name on registration
+    if (tab === 'register' && !name.trim()) {
+      return toast.error('Digite seu nome')
+    }
+    
     setLoading(true)
     try {
       let cred
@@ -42,16 +51,32 @@ export default function Login() {
         cred = await signInWithEmailAndPassword(auth, email.trim(), pass)
         toast.success('Bem-vindo de volta! 🎉')
       } else {
+        // Create user
         cred = await createUserWithEmailAndPassword(auth, email.trim(), pass)
+        
+        // Update display name
+        await updateProfile(cred.user, { displayName: name.trim() })
+        
+        // Save to users collection in Firestore
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          name: name.trim(),
+          email: cred.user.email,
+          createdAt: serverTimestamp(),
+        })
+        
         toast.success('Conta criada! 🎉')
       }
+      
       setUser(cred.user)
-      setAccount({ uid: cred.user.uid, email: cred.user.email })
+      setAccount({ 
+        uid: cred.user.uid, 
+        email: cred.user.email,
+        displayName: cred.user.displayName || name.trim() || cred.user.email
+      })
       navigate('/admin')
     } catch (e) {
       const msg = AUTH_ERRORS[e.code] || e.message
       toast.error(msg, { duration: 5000 })
-      // Show setup instructions if operation-not-allowed
       if (e.code === 'auth/operation-not-allowed') {
         setShowSetup(true)
       }
@@ -113,6 +138,23 @@ export default function Login() {
 
           {/* Fields */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            
+            {/* Name field - only on register */}
+            {tab === 'register' && (
+              <div>
+                <label className="lbl" style={{ color: '#4c1d95' }}>Nome completo</label>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  type="text"
+                  placeholder="Seu nome"
+                  className="inp"
+                  onKeyDown={e => e.key === 'Enter' && handleAuth()}
+                  autoFocus
+                />
+              </div>
+            )}
+            
             <div>
               <label className="lbl" style={{ color: '#4c1d95' }}>E-mail</label>
               <input
@@ -122,7 +164,7 @@ export default function Login() {
                 placeholder="seuemail@exemplo.com"
                 className="inp"
                 onKeyDown={e => e.key === 'Enter' && handleAuth()}
-                autoFocus
+                autoFocus={tab === 'login'}
               />
             </div>
             <div>
@@ -144,7 +186,7 @@ export default function Login() {
             </button>
           </div>
 
-          {/* Firebase setup instructions (shown on operation-not-allowed) */}
+          {/* Firebase setup instructions */}
           {showSetup && (
             <div style={{ marginTop: 16, padding: '14px 16px', background: '#fef3c7', borderRadius: 12, border: '2px solid #fbbf24' }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#92400e', marginBottom: 8 }}>
