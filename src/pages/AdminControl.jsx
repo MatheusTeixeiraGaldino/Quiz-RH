@@ -6,6 +6,11 @@ import { db } from '../firebase'
 import { RankItem, OPT_COLORS, OPT_SHAPES, LABELS } from '../components/UI'
 import toast from 'react-hot-toast'
 
+// room.phase values:
+//   undefined / 'question'    → showing question
+//   'explanation'             → showing explanation (admin controls when to advance)
+//   'pause'                   → showing pause image (admin controls when to advance)
+
 function getJoinLink(roomId) {
   return `${location.origin}${location.pathname}#/join/${roomId}`
 }
@@ -20,12 +25,14 @@ export default function AdminControl() {
   const [answers,   setAnswers]   = useState([])
   const [timer,     setTimer]     = useState(0)
   const [qOpen,     setQOpen]     = useState(false)
+  const [pauseTimer, setPauseTimer] = useState(3) // countdown 3s before auto-advance
 
-  const timerRef    = useRef(null)
-  const qrDoneRef   = useRef(false)
-  const autoRef     = useRef(null)
-  const lastQRef    = useRef(-1)
-  const advancedRef = useRef(false)
+  const timerRef      = useRef(null)
+  const qrDoneRef     = useRef(false)
+  const autoRef       = useRef(null)
+  const pauseTimerRef = useRef(null)
+  const lastQRef      = useRef(-1)
+  const advancedRef   = useRef(false)
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -52,7 +59,7 @@ export default function AdminControl() {
     return () => clearTimeout(t)
   }, [room?.status])
 
-  // ── Timer (only runs during 'question' phase, NOT during 'explanation') ────
+  // ── Timer (only runs during 'question' phase) ──────────────────────────────
   useEffect(() => {
     const isQuestion = !room?.phase || room.phase === 'question'
     if (!room || room.status !== 'playing' || !questions.length || !isQuestion) {
@@ -75,10 +82,11 @@ export default function AdminControl() {
   }, [room?.currentQuestion, room?.status, room?.phase, questions.length])
 
   // ── Auto-advance when ALL players answered ─────────────────────────────────
+  // Logic: if all answered → check if has explanation OR pause → go to that phase OR auto-advance after 3s
   useEffect(() => {
     if (!room?.autoAdvance || room.status !== 'playing') return
     if (!players.length || !questions.length) return
-    if (room.phase === 'explanation') return
+    if (room.phase === 'explanation' || room.phase === 'pause') return
     const cqIdx  = room.currentQuestion ?? 0
     const curQ   = questions[cqIdx]
     if (!curQ) return
@@ -89,20 +97,36 @@ export default function AdminControl() {
     advancedRef.current = true
 
     const t = setTimeout(() => {
-      if (room.showExplain) {
+      if (room.showExplain && curQ.explicacao) {
+        // Has explanation → go to explanation phase (manual advance)
         updateDoc(doc(db, 'rooms', roomId), { phase: 'explanation' })
+      } else if (curQ.pauseImage) {
+        // Has pause image → go to pause phase (manual advance)
+        updateDoc(doc(db, 'rooms', roomId), { phase: 'pause' })
       } else {
-        advanceToNext(cqIdx)
+        // No explanation, no pause → auto-advance with 3s timer
+        setPauseTimer(3)
+        clearInterval(pauseTimerRef.current)
+        pauseTimerRef.current = setInterval(() => {
+          setPauseTimer(t => {
+            if (t <= 1) {
+              clearInterval(pauseTimerRef.current)
+              advanceToNext(cqIdx)
+              return 0
+            }
+            return t - 1
+          })
+        }, 1000)
       }
     }, 1200)
     return () => clearTimeout(t)
   }, [answers.length, room?.autoAdvance, room?.currentQuestion, room?.phase, players.length])
 
-  // ── Auto-mode timer-based (only during question phase) ─────────────────────
+  // ── Auto-mode timer-based ──────────────────────────────────────────────────
   useEffect(() => {
     clearTimeout(autoRef.current)
     if (!room?.autoMode || room.status !== 'playing' || !questions.length) return
-    if (room.phase === 'explanation') return
+    if (room.phase === 'explanation' || room.phase === 'pause') return
     const cqIdx = room.currentQuestion ?? 0
     const cq    = questions[cqIdx]
     if (!cq) return
@@ -110,8 +134,10 @@ export default function AdminControl() {
     autoRef.current = setTimeout(() => {
       if (!advancedRef.current) {
         advancedRef.current = true
-        if (room.showExplain) {
+        if (room.showExplain && cq.explicacao) {
           updateDoc(doc(db, 'rooms', roomId), { phase: 'explanation' })
+        } else if (cq.pauseImage) {
+          updateDoc(doc(db, 'rooms', roomId), { phase: 'pause' })
         } else {
           advanceToNext(cqIdx)
         }
@@ -120,9 +146,10 @@ export default function AdminControl() {
     return () => clearTimeout(autoRef.current)
   }, [room?.currentQuestion, room?.status, room?.phase, room?.autoMode, questions.length])
 
-  useEffect(() => () => { clearInterval(timerRef.current); clearTimeout(autoRef.current) }, [])
+  useEffect(() => () => { clearInterval(timerRef.current); clearTimeout(autoRef.current); clearInterval(pauseTimerRef.current) }, [])
 
   const advanceToNext = (cqIdx) => {
+    clearInterval(pauseTimerRef.current)
     if ((cqIdx ?? 0) < questions.length - 1) {
       updateDoc(doc(db, 'rooms', roomId), { currentQuestion: (cqIdx ?? 0) + 1, phase: 'question' })
     } else {
@@ -148,10 +175,12 @@ export default function AdminControl() {
   const maxStat      = Math.max(...optStats, 1)
   const allAnswered  = players.length > 0 && answeredForQ.length >= players.length
   const isExplanation = room.phase === 'explanation'
+  const isPause       = room.phase === 'pause'
 
   const lightBg = 'linear-gradient(160deg,#fce7f3,#ede9fe,#dbeafe)'
   const gameBg  = 'linear-gradient(160deg,#4f46e5 0%,#7c3aed 50%,#db2777 100%)'
   const explBg  = 'linear-gradient(160deg,#1e1b4b,#312e81)'
+  const pauseBg = 'linear-gradient(160deg,#0f172a,#1e293b)'
 
   // ── WAITING ────────────────────────────────────────────────────────────────
   if (room.status === 'waiting') return (
@@ -165,7 +194,6 @@ export default function AdminControl() {
       </div>
 
       <div className="screen" style={{ maxWidth: 600 }}>
-        {/* PIN + QR */}
         <div className="card" style={{ textAlign: 'center', border: '2px solid rgba(139,92,246,.3)', boxShadow: '0 4px 0 rgba(139,92,246,.15)' }}>
           <div className="card-title">🔗 Compartilhe para entrar</div>
           <div style={{ background: '#f5f3ff', borderRadius: 12, padding: '14px 28px', display: 'inline-block', marginBottom: 12 }}>
@@ -182,7 +210,6 @@ export default function AdminControl() {
           </div>
         </div>
 
-        {/* Players */}
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div className="card-title" style={{ marginBottom: 0 }}>👥 Participantes</div>
@@ -199,7 +226,6 @@ export default function AdminControl() {
           </div>
         </div>
 
-        {/* Questions — ACCORDION */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <button
             onClick={() => setQOpen(p => !p)}
@@ -208,7 +234,7 @@ export default function AdminControl() {
               <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: '#6b7280' }}>
                 📋 {questions.length} pergunta{questions.length !== 1 ? 's' : ''}
               </span>
-              {room.showExplain && <span className="badge badge-purple" style={{ fontSize: 10 }}>💬 explicação ativa</span>}
+              {room.showExplain && <span className="badge badge-purple" style={{ fontSize: 10 }}>💬 explicação</span>}
               {room.autoAdvance && <span className="badge badge-green" style={{ fontSize: 10 }}>⚡ auto-avanço</span>}
             </div>
             <span style={{ color: '#8b5cf6', fontSize: 18, fontWeight: 700 }}>{qOpen ? '▲' : '▼'}</span>
@@ -224,6 +250,7 @@ export default function AdminControl() {
                       <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700, marginTop: 2 }}>
                         {q.pontuacao}pts · {q.tempo}s · <span style={{ color: '#10b981' }}>✓ {LABELS[q.correta]}</span>
                         {q.explicacao && <span style={{ color: '#8b5cf6' }}> · 💬</span>}
+                        {q.pauseImage && <span style={{ color: '#f59e0b' }}> · ⏸</span>}
                       </div>
                     </div>
                     <span className="badge badge-purple" style={{ fontSize: 10, flexShrink: 0 }}>{q.pontuacao}pts</span>
@@ -244,19 +271,48 @@ export default function AdminControl() {
     </div>
   )
 
-  // ── EXPLANATION PHASE (admin + players see this, NO TIMER, manual advance) ─
+  // ── PAUSE PHASE (showing pause image) ──────────────────────────────────────
+  if (room.status === 'playing' && isPause && curQ) return (
+    <div style={{ minHeight: '100vh', background: pauseBg, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'rgba(0,0,0,.25)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 20, color: '#fff' }}>OL Quiz! ⚡</span>
+        <span style={{ background: '#f59e0b', color: '#fff', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>⏸ Pausa</span>
+        <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{cqIdx+1}/{questions.length}</span>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        {curQ.pauseImage && (
+          <img 
+            src={curQ.pauseImage} 
+            alt="Pausa"
+            style={{ maxWidth: '90%', maxHeight: '70vh', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,.4)' }}
+            onError={e => { e.target.style.display = 'none' }}
+          />
+        )}
+        <div style={{ marginTop: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: 14, color: 'rgba(255,255,255,.6)', fontWeight: 700, marginBottom: 16 }}>
+            Clique para continuar
+          </div>
+          <button
+            onClick={() => { advancedRef.current = true; advanceToNext(cqIdx) }}
+            className="btn btn-primary" style={{ fontSize: 17, padding: '15px 32px' }}>
+            {cqIdx < questions.length - 1 ? 'Próxima pergunta →' : '🏁 Encerrar quiz'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── EXPLANATION PHASE ──────────────────────────────────────────────────────
   if (room.status === 'playing' && isExplanation && curQ) return (
     <div style={{ minHeight: '100vh', background: explBg, display: 'flex', flexDirection: 'column' }}>
       <div style={{ background: 'rgba(0,0,0,.25)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 20, color: '#fff' }}>OL Quiz! ⚡</span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ background: '#a78bfa', color: '#1e1b4b', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>💬 Explicação</span>
-        </div>
+        <span style={{ background: '#a78bfa', color: '#1e1b4b', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>💬 Explicação</span>
         <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{cqIdx+1}/{questions.length}</span>
       </div>
 
       <div style={{ flex: 1, padding: '16px 14px', maxWidth: 700, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* Question recap */}
         <div style={{ background: 'rgba(255,255,255,.08)', border: '2px solid rgba(255,255,255,.15)', borderRadius: 14, padding: '16px 18px' }}>
           <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.5)', marginBottom: 8 }}>Pergunta {cqIdx+1}</div>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#fff', lineHeight: 1.4, marginBottom: 14 }}>{curQ.pergunta}</div>
@@ -271,19 +327,17 @@ export default function AdminControl() {
           </div>
         </div>
 
-        {/* Explanation */}
         <div style={{ background: 'rgba(139,92,246,.15)', border: '2px solid rgba(139,92,246,.35)', borderRadius: 14, padding: '16px 18px' }}>
           <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: '#a78bfa', marginBottom: 8 }}>💬 Explicação</div>
           {curQ.explicacao ? (
             <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', lineHeight: 1.6 }}>{curQ.explicacao}</div>
           ) : (
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,.4)', fontWeight: 600, fontStyle: 'italic' }}>Sem explicação cadastrada para esta pergunta.</div>
+            <div style={{ fontSize: 14, color: 'rgba(255,255,255,.4)', fontWeight: 600, fontStyle: 'italic' }}>Sem explicação cadastrada.</div>
           )}
         </div>
 
-        {/* Answer distribution */}
         <div style={{ background: 'rgba(0,0,0,.2)', borderRadius: 12, padding: '12px 14px' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.4)', marginBottom: 8 }}>Distribuição de respostas</div>
+          <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.4)', marginBottom: 8 }}>Distribuição</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 56, marginBottom: 6 }}>
             {curQ.opcoes.map((_, i) => {
               const cnt = optStats[i] || 0
@@ -296,23 +350,8 @@ export default function AdminControl() {
               )
             })}
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {curQ.opcoes.map((opt, i) => (
-              <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: i === curQ.correta ? '#4ade80' : 'rgba(255,255,255,.5)', fontWeight: 700, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                {i === curQ.correta ? '✓' : OPT_SHAPES[i]}
-              </div>
-            ))}
-          </div>
         </div>
 
-        {/* Answers count */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,.08)', border: '2px solid rgba(255,255,255,.12)', borderRadius: 12, padding: '10px 14px' }}>
-          <span style={{ fontSize: 16 }}>✍️</span>
-          <span style={{ color: 'rgba(255,255,255,.7)', fontWeight: 700, fontSize: 13 }}>Respostas:</span>
-          <span style={{ fontFamily: "'Fredoka One',cursive", color: '#fbbf24', fontSize: 18, marginLeft: 'auto' }}>{answeredForQ.length} / {players.length}</span>
-        </div>
-
-        {/* ADVANCE BUTTON — manual only, NO TIMER */}
         <button
           onClick={() => { advancedRef.current = true; advanceToNext(cqIdx) }}
           className="btn btn-primary" style={{ fontSize: 17, padding: '15px 24px' }}>
@@ -329,7 +368,12 @@ export default function AdminControl() {
       <div style={{ background: 'rgba(0,0,0,.2)', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 20, color: '#fff' }}>OL Quiz! ⚡</span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {allAnswered && <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>✅ Todos responderam</span>}
+          {allAnswered && pauseTimer > 0 && !room.showExplain && !curQ.pauseImage && (
+            <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>
+              Próxima em {pauseTimer}s
+            </span>
+          )}
+          {allAnswered && !pauseTimer && <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>✅ Todos responderam</span>}
           <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>🔴 Ao vivo</span>
         </div>
         <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{cqIdx+1}/{questions.length}</span>
@@ -353,7 +397,6 @@ export default function AdminControl() {
         </div>
       </div>
 
-      {/* Bar chart */}
       <div style={{ padding: '0 12px 10px' }}>
         <div style={{ background: 'rgba(0,0,0,.25)', borderRadius: 12, padding: '12px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 72, marginBottom: 6 }}>
@@ -397,21 +440,22 @@ export default function AdminControl() {
       </div>
 
       <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {room.showExplain ? (
+        {room.showExplain && curQ.explicacao ? (
           <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { phase: 'explanation' }) }}
-            className="btn btn-white" style={{ fontSize: 16 }}>
-            💬 Ver explicação
-          </button>
+            className="btn btn-white" style={{ fontSize: 16 }}>💬 Ver explicação</button>
+        ) : curQ.pauseImage ? (
+          <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { phase: 'pause' }) }}
+            className="btn btn-white" style={{ fontSize: 16 }}>⏸ Ver slide</button>
         ) : (
           cqIdx < questions.length - 1
-            ? <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { currentQuestion: cqIdx + 1, phase: 'question' }) }} className="btn btn-white" style={{ fontSize: 16 }}>Próxima pergunta →</button>
-            : <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { status: 'finished', phase: 'question' }).then(() => navigate(`/room/${roomId}/podium`)) }} className="btn btn-success" style={{ fontSize: 16 }}>🏁 Encerrar e ver pódio</button>
+            ? <button onClick={() => { advancedRef.current = true; clearInterval(pauseTimerRef.current); updateDoc(doc(db, 'rooms', roomId), { currentQuestion: cqIdx + 1, phase: 'question' }) }} className="btn btn-white" style={{ fontSize: 16 }}>Próxima pergunta →</button>
+            : <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { status: 'finished', phase: 'question' }).then(() => navigate(`/room/${roomId}/podium`)) }} className="btn btn-success" style={{ fontSize: 16 }}>🏁 Encerrar</button>
         )}
         <button onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })} className="btn btn-danger btn-sm">⏹ Encerrar agora</button>
       </div>
 
       <div style={{ padding: '0 12px 28px' }}>
-        <div style={{ fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.45)', marginBottom: 8 }}>📊 Ranking ao vivo</div>
+        <div style={{ fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.45)', marginBottom: 8 }}>📊 Ranking</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {players.slice(0,5).map((p,i) => <RankItem key={p.id} rank={i+1} player={p} delay={i*50} />)}
         </div>

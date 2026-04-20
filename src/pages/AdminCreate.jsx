@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 
 const DEFAULT_Q = {
   type: 'multiple', pergunta: '', opcoes: ['', '', '', ''],
-  correta: 0, pontuacao: 100, tempo: 30, imagem: '', explicacao: '',
+  correta: 0, pontuacao: 100, tempo: 30, imagem: '', explicacao: '', pauseImage: '',
 }
 
 function Toggle({ value, onChange, label, sub, disabled }) {
@@ -91,6 +91,22 @@ function QuestionForm({ onSave, onCancel, initial }) {
         <label className="lbl">💬 Explicação <span style={{ fontSize: 10, textTransform: 'none', color: '#a78bfa', fontWeight: 600 }}>(opcional — exibida após responder)</span></label>
         <textarea value={q.explicacao || ''} onChange={e => set('explicacao', e.target.value)} placeholder="Ex: A resposta correta é A porque…" rows={2} className="inp" />
       </div>
+      
+      {/* NEW: Pause/Slide Image */}
+      <div style={{ marginBottom: 12 }}>
+        <label className="lbl">⏸ Slide de pausa (URL — opcional)</label>
+        <input value={q.pauseImage || ''} onChange={e => set('pauseImage', e.target.value)} placeholder="https://… (imagem de slide/pausa após esta pergunta)" className="inp" />
+        {q.pauseImage && (
+          <div style={{ position: 'relative', marginTop: 8 }}>
+            <img src={q.pauseImage} alt="slide preview" style={{ width: '100%', maxHeight: 140, objectFit: 'contain', borderRadius: 8, background: '#f5f3ff' }} onError={e => { e.target.style.display = 'none' }} />
+            <button onClick={() => set('pauseImage', '')} style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, cursor: 'pointer', fontWeight: 700 }}>×</button>
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, marginTop: 4 }}>
+          ⚠️ Se configurado, após esta pergunta aparecerá esta imagem (slide) e o admin controla quando avançar
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
         <div>
           <label className="lbl">Pontuação</label>
@@ -113,7 +129,6 @@ function QuestionForm({ onSave, onCancel, initial }) {
   )
 }
 
-// User dropdown selector (replaces EmailChips)
 function UserSelector({ selectedUids, onChange }) {
   const [allUsers, setAllUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -146,7 +161,7 @@ function UserSelector({ selectedUids, onChange }) {
   if (allUsers.length === 0) {
     return (
       <div style={{ padding: '12px 14px', background: '#fef3c7', borderRadius: 10, border: '1.5px solid #fbbf24', fontSize: 13, fontWeight: 700, color: '#92400e' }}>
-        ℹ️ Nenhum usuário cadastrado no sistema ainda. Quando outros usuários fizerem login, eles aparecerão aqui.
+        ℹ️ Nenhum usuário cadastrado no sistema ainda.
       </div>
     )
   }
@@ -173,7 +188,7 @@ function UserSelector({ selectedUids, onChange }) {
         })}
       </div>
       <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
-        {selectedUids.length === 0 ? 'Nenhum usuário selecionado' : `${selectedUids.length} usuário${selectedUids.length > 1 ? 's' : ''} selecionado${selectedUids.length > 1 ? 's' : ''}`}
+        {selectedUids.length === 0 ? 'Nenhum usuário selecionado' : `${selectedUids.length} selecionado${selectedUids.length > 1 ? 's' : ''}`}
       </div>
     </div>
   )
@@ -194,10 +209,9 @@ export default function AdminCreate() {
   const [autoInterval, setAutoInterval] = useState(5)
   const [autoAdvance,  setAutoAdvance]  = useState(false)
   const [showExplain,  setShowExplain]  = useState(false)
-  const [explainTime,  setExplainTime]  = useState(8)
   const [saveTemplate, setSaveTemplate] = useState(false)
   const [tplAccess,    setTplAccess]    = useState('private')
-  const [sharedWith,   setSharedWith]   = useState([]) // array of uids (not emails)
+  const [sharedWith,   setSharedWith]   = useState([])
   const fileRef = useRef()
 
   React.useEffect(() => {
@@ -253,20 +267,15 @@ export default function AdminCreate() {
         nome: roomName, status: 'waiting', currentQuestion: 0,
         adminUid: user?.uid || '', criadoEm: serverTimestamp(),
         totalQuestions: questions.length,
-        autoMode, autoInterval, autoAdvance,
-        showExplain, explainTime,
+        autoMode, autoInterval, autoAdvance, showExplain,
       })
 
-      // Save template — ONLY for logged-in (non-anonymous) users
       if (saveTemplate && isLoggedIn) {
         await addDoc(collection(db, 'templates'), {
-          nome: roomName,
-          perguntas: questions,
-          ownerUid: user.uid,
-          ownerEmail: account.email,
+          nome: roomName, perguntas: questions,
+          ownerUid: user.uid, ownerEmail: account.email,
           ownerName: account.displayName || account.email,
-          tplAccess,
-          sharedWith: tplAccess === 'shared' ? sharedWith : [],
+          tplAccess, sharedWith: tplAccess === 'shared' ? sharedWith : [],
           criadoEm: serverTimestamp(),
         })
         toast.success('Template salvo! 💾')
@@ -285,8 +294,8 @@ export default function AdminCreate() {
   }
 
   const ACCESS_OPTIONS = [
-    { v: 'private', icon: '🔒', label: 'Somente eu',    desc: 'Só você pode ver e usar' },
-    { v: 'global',  icon: '🌍', label: 'Todos os admins', desc: 'Qualquer admin logado acessa' },
+    { v: 'private', icon: '🔒', label: 'Somente eu',    desc: 'Só você pode ver' },
+    { v: 'global',  icon: '🌍', label: 'Todos os admins', desc: 'Qualquer admin acessa' },
     { v: 'shared',  icon: '👥', label: 'Usuários específicos', desc: 'Somente quem você selecionar' },
   ]
 
@@ -299,7 +308,6 @@ export default function AdminCreate() {
 
       <div className="screen" style={{ maxWidth: 700 }}>
 
-        {/* Name */}
         <div className="card">
           <div className="card-title">⚙️ Configurar sala</div>
           <div>
@@ -308,7 +316,6 @@ export default function AdminCreate() {
           </div>
         </div>
 
-        {/* Game options */}
         <div className="card">
           <div className="card-title">🎮 Opções do jogo</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -321,35 +328,24 @@ export default function AdminCreate() {
                 </select>
               </div>
             )}
-            <Toggle value={autoAdvance} onChange={() => setAutoAdvance(p => !p)} label="Avançar quando todos responderem" sub="Passa automaticamente sem esperar o tempo acabar" />
-            <Toggle value={showExplain} onChange={() => setShowExplain(p => !p)} label="Mostrar resposta e explicação" sub="Exibe a resposta certa e explicação após cada pergunta" />
-            {showExplain && (
-              <div style={{ paddingLeft: 12, fontSize: 12, color: '#6b7280', fontWeight: 700, fontStyle: 'italic' }}>
-                ℹ️ A explicação aparecerá na tela do admin e dos participantes. O admin controla quando avançar (sem timer automático).
-              </div>
-            )}
+            <Toggle value={autoAdvance} onChange={() => setAutoAdvance(p => !p)} label="Avançar quando todos responderem" sub="Se tiver explicação/pausa → vai pra lá. Senão → timer 3s e avança" />
+            <Toggle value={showExplain} onChange={() => setShowExplain(p => !p)} label="Mostrar explicação" sub="Exibe explicação se cadastrada (admin controla avanço)" />
           </div>
         </div>
 
-        {/* Template section — only for logged-in users */}
         <div className="card">
           <div className="card-title">💾 Salvar como template</div>
           {!isLoggedIn ? (
             <div style={{ padding: '12px 14px', background: '#fef3c7', borderRadius: 10, border: '1.5px solid #fbbf24', fontSize: 14, fontWeight: 700, color: '#92400e' }}>
-              🔐 Faça{' '}
-              <button onClick={() => navigate('/login')} style={{ color: '#8b5cf6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, textDecoration: 'underline', fontSize: 14 }}>
-                login
-              </button>
-              {' '}para salvar e reutilizar este quiz como template.
+              🔐 Faça <button onClick={() => navigate('/login')} style={{ color: '#8b5cf6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, textDecoration: 'underline', fontSize: 14 }}>login</button> para salvar templates.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <Toggle value={saveTemplate} onChange={() => setSaveTemplate(p => !p)} label="Salvar este quiz como template" sub="Você poderá reutilizá-lo em outros quizzes" />
-
+              <Toggle value={saveTemplate} onChange={() => setSaveTemplate(p => !p)} label="Salvar como template" sub="Reutilize este quiz" />
               {saveTemplate && (
                 <>
                   <div>
-                    <label className="lbl">Quem pode ver este template?</label>
+                    <label className="lbl">Quem pode ver?</label>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {ACCESS_OPTIONS.map(({ v, icon, label, desc }) => (
                         <button key={v} onClick={() => setTplAccess(v)}
@@ -364,16 +360,10 @@ export default function AdminCreate() {
                       ))}
                     </div>
                   </div>
-
                   {tplAccess === 'shared' && (
                     <div>
-                      <label className="lbl">Selecione os usuários autorizados</label>
+                      <label className="lbl">Usuários autorizados</label>
                       <UserSelector selectedUids={sharedWith} onChange={setSharedWith} />
-                      {sharedWith.length === 0 && (
-                        <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3c7', borderRadius: 8, border: '1.5px solid #fbbf24', fontSize: 12, fontWeight: 700, color: '#92400e' }}>
-                          ⚠️ Selecione ao menos um usuário para compartilhamento funcionar
-                        </div>
-                      )}
                     </div>
                   )}
                 </>
@@ -382,14 +372,12 @@ export default function AdminCreate() {
           )}
         </div>
 
-        {/* Import/Export */}
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={exportJSON} disabled={!questions.length} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>📤 Exportar JSON</button>
-          <button onClick={() => fileRef.current?.click()} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>📥 Importar JSON</button>
+          <button onClick={exportJSON} disabled={!questions.length} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>📤 Exportar</button>
+          <button onClick={() => fileRef.current?.click()} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>📥 Importar</button>
           <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={importJSON} />
         </div>
 
-        {/* Questions */}
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div className="card-title" style={{ marginBottom: 0 }}>📋 Perguntas</div>
@@ -409,6 +397,7 @@ export default function AdminCreate() {
                         <span>{q.pontuacao}pts · {q.tempo}s</span>
                         <span style={{ color: '#10b981' }}>✓ {LABELS[q.correta]}: {(q.opcoes[q.correta]||'').slice(0,20)}</span>
                         {q.explicacao && <span style={{ color: '#8b5cf6' }}>💬</span>}
+                        {q.pauseImage && <span style={{ color: '#f59e0b' }}>⏸</span>}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>

@@ -20,7 +20,7 @@ export default function PlayerGame() {
   const [answered,  setAnswered]  = useState({})
   const [myScore,   setMyScore]   = useState(0)
   const [timer,     setTimer]     = useState(30)
-  const [phase,     setPhase]     = useState('question') // 'question' | 'feedback' | 'explanation'
+  const [phase,     setPhase]     = useState('question') // 'question' | 'feedback' | 'explanation' | 'pause'
   const [lastPts,   setLastPts]   = useState(0)
   const [streak,    setStreak]    = useState(0)
 
@@ -59,12 +59,11 @@ export default function PlayerGame() {
     )
   }, [roomId, playerId])
 
-  // ── Timer (only runs during 'question' phase, NOT during 'explanation') ────
+  // ── Timer (only runs during 'question' phase) ──────────────────────────────
   useEffect(() => {
     if (!room || !questions.length) return
     if (room.status !== 'playing') { clearInterval(timerRef.current); return }
     
-    // Timer ONLY runs when phase is 'question' or undefined
     const isQuestion = !room.phase || room.phase === 'question'
     if (!isQuestion) {
       clearInterval(timerRef.current)
@@ -75,7 +74,6 @@ export default function PlayerGame() {
     const cq    = questions[cqIdx]
     if (!cq) return
 
-    // Reset timer only when question changes AND we're in question phase
     if (lastQIdxRef.current === cqIdx && room.phase === 'question') return
     lastQIdxRef.current = cqIdx
 
@@ -94,9 +92,10 @@ export default function PlayerGame() {
     if (!room) return
     if (room.phase === 'explanation') {
       setPhase('explanation')
+    } else if (room.phase === 'pause') {
+      setPhase('pause')
     } else if (room.phase === 'question' || !room.phase) {
-      // Only go back to question if we're not in feedback
-      if (phase === 'explanation') {
+      if (phase === 'explanation' || phase === 'pause') {
         setPhase('question')
       }
     }
@@ -121,7 +120,6 @@ export default function PlayerGame() {
     if (isCorrect) setStreak(s => s + 1); else setStreak(0)
     setPhase('feedback')
 
-    // Sound
     if (soundEnabled) {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)()
@@ -157,7 +155,7 @@ export default function PlayerGame() {
     </div>
   )
 
-  // ── FINISHED — show per-question summary ────────────────────────────────────
+  // ── FINISHED ────────────────────────────────────────────────────────────────
   if (room.status === 'finished') {
     const correct = questions.filter(q => answered[q.id] === q.correta).length
     const wrong   = questions.filter(q => answered[q.id] !== undefined && answered[q.id] !== q.correta).length
@@ -170,7 +168,6 @@ export default function PlayerGame() {
         </div>
 
         <div style={{ flex:1, overflowY:'auto', padding:'16px 14px 32px', maxWidth:500, margin:'0 auto', width:'100%' }}>
-          {/* Score card */}
           <div style={{ textAlign:'center', marginBottom:20 }}>
             <div style={{ fontSize:56, animation:'bounceIn .6s ease' }}>🏁</div>
             <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:28, color:'#fff', marginTop:8 }}>Fim de jogo!</div>
@@ -180,7 +177,6 @@ export default function PlayerGame() {
             <div style={{ fontSize:13, color:'rgba(255,255,255,.6)', fontWeight:700, marginTop:2 }}>pontos</div>
           </div>
 
-          {/* Stats */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:20 }}>
             {[['✅', correct, 'Acertos','#22c55e'], ['❌', wrong, 'Erros','#ef4444'], ['⏭', missed, 'Puladas','#6b7280']].map(([icon, val, label, color]) => (
               <div key={label} style={{ background:'rgba(255,255,255,.1)', border:`2px solid ${color}44`, borderRadius:12, padding:'12px 8px', textAlign:'center' }}>
@@ -191,11 +187,8 @@ export default function PlayerGame() {
             ))}
           </div>
 
-          {/* Per-question breakdown */}
           <div style={{ marginBottom:16 }}>
-            <div style={{ fontWeight:800, fontSize:13, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:10 }}>
-              📋 Resumo por pergunta
-            </div>
+            <div style={{ fontWeight:800, fontSize:13, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:10 }}>📋 Resumo por pergunta</div>
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {questions.map((q, i) => {
                 const myAns   = answered[q.id]
@@ -228,7 +221,7 @@ export default function PlayerGame() {
                         )}
                         {hasAns && isOk && (
                           <div style={{ fontSize:11, color:'#fbbf24', fontWeight:800, marginTop:2 }}>
-                            +{q.pontuacao} pts (base)
+                            +{q.pontuacao} pts
                           </div>
                         )}
                       </div>
@@ -239,7 +232,7 @@ export default function PlayerGame() {
             </div>
           </div>
 
-          <button onClick={() => navigate(`/room/${roomId}/podium`)} className="btn btn-white" style={{ fontSize:17, marginBottom:8 }}>
+          <button onClick={() => navigate(`/room/${roomId}/podium`)} className="btn btn-white" style={{ fontSize:17 }}>
             🏆 Ver pódio
           </button>
         </div>
@@ -263,7 +256,30 @@ export default function PlayerGame() {
   const timerWarn = timer <= 5
   const timerPct  = Math.max(0, (timer / (q.tempo || 30)) * 100)
 
-  // ── EXPLANATION PHASE (synced with room.phase) ─────────────────────────────
+  // ── PAUSE PHASE (showing pause/slide image) ────────────────────────────────
+  if (phase === 'pause') {
+    return (
+      <div style={{ minHeight:'100vh', background:'linear-gradient(160deg,#0f172a,#1e293b)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24 }}>
+        {q.pauseImage && (
+          <img 
+            src={q.pauseImage} 
+            alt="Pausa"
+            style={{ maxWidth:'90%', maxHeight:'80vh', borderRadius:12, boxShadow:'0 8px 32px rgba(0,0,0,.5)' }}
+            onError={e => { e.target.style.display = 'none' }}
+          />
+        )}
+        <div style={{ marginTop:24, fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:700, textAlign:'center' }}>
+          Aguardando o palestrante…
+        </div>
+        <div className="score-box" style={{ width:200, marginTop:12 }}>
+          <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:2 }}>Sua pontuação</div>
+          <div className="score-num">{myScore.toLocaleString('pt-BR')}</div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── EXPLANATION PHASE ───────────────────────────────────────────────────────
   if (phase === 'explanation') {
     return (
       <div style={{ minHeight:'100vh', background:'linear-gradient(160deg,#1e1b4b,#312e81)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24, textAlign:'center', gap:16 }}>
@@ -276,11 +292,11 @@ export default function PlayerGame() {
           {q.explicacao ? (
             <div style={{ fontSize:16, color:'#fff', fontWeight:700, lineHeight:1.5 }}>{q.explicacao}</div>
           ) : (
-            <div style={{ fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:600, fontStyle:'italic' }}>Sem explicação cadastrada</div>
+            <div style={{ fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:600, fontStyle:'italic' }}>Sem explicação</div>
           )}
         </div>
         <div style={{ fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:700, fontStyle:'italic' }}>
-          Aguardando o admin avançar…
+          Aguardando o admin…
         </div>
         <div className="score-box" style={{ width:200, marginTop:4 }}>
           <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:2 }}>Total</div>
@@ -311,11 +327,7 @@ export default function PlayerGame() {
           <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.55)', marginBottom:2 }}>Total</div>
           <div className="score-num">{myScore.toLocaleString('pt-BR')}</div>
         </div>
-        {room.showExplain ? (
-          <p style={{ color:'rgba(255,255,255,.45)', fontSize:13, fontWeight:700, marginTop:4 }}>Aguardando explicação…</p>
-        ) : (
-          <p style={{ color:'rgba(255,255,255,.45)', fontSize:13, fontWeight:700, marginTop:4 }}>Aguardando próxima pergunta…</p>
-        )}
+        <p style={{ color:'rgba(255,255,255,.45)', fontSize:13, fontWeight:700, marginTop:4 }}>Aguardando…</p>
       </div>
     )
   }
@@ -323,7 +335,6 @@ export default function PlayerGame() {
   // ── QUESTION PHASE ─────────────────────────────────────────────────────────
   return (
     <div className="game-bg" style={{ display:'flex', flexDirection:'column', minHeight:'100vh' }}>
-      {/* Top bar — NO home button */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', background:'rgba(0,0,0,.18)' }}>
         <span style={{ fontWeight:800, fontSize:13, color:'rgba(255,255,255,.65)' }}>{cqIdx+1} / {questions.length}</span>
         <div className={`timer-circle ${timerWarn ? 'warn' : ''}`}>{timer}</div>
