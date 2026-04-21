@@ -6,11 +6,6 @@ import { db } from '../firebase'
 import { RankItem, OPT_COLORS, OPT_SHAPES, LABELS } from '../components/UI'
 import toast from 'react-hot-toast'
 
-// room.phase values:
-//   undefined / 'question'    → showing question
-//   'explanation'             → showing explanation (admin controls when to advance)
-//   'pause'                   → showing pause image (admin controls when to advance)
-
 function getJoinLink(roomId) {
   return `${location.origin}${location.pathname}#/join/${roomId}`
 }
@@ -20,25 +15,27 @@ export default function AdminControl() {
   const navigate   = useNavigate()
 
   const [room,      setRoom]      = useState(null)
-  const [questions, setQuestions] = useState([])
+  const [items,     setItems]     = useState([]) // questions + slides
   const [players,   setPlayers]   = useState([])
   const [answers,   setAnswers]   = useState([])
   const [timer,     setTimer]     = useState(0)
   const [qOpen,     setQOpen]     = useState(false)
-  const [pauseTimer, setPauseTimer] = useState(3) // countdown 3s before auto-advance
+  const [pauseTimer, setPauseTimer] = useState(3)
+  const [slideTimer, setSlideTimer] = useState(0) // for auto-advance slides
 
   const timerRef      = useRef(null)
   const qrDoneRef     = useRef(false)
   const autoRef       = useRef(null)
   const pauseTimerRef = useRef(null)
-  const lastQRef      = useRef(-1)
+  const slideTimerRef = useRef(null)
+  const lastIdxRef    = useRef(-1)
   const advancedRef   = useRef(false)
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   useEffect(() => {
     const u1 = onSnapshot(doc(db, 'rooms', roomId), s => setRoom({ id: s.id, ...s.data() }))
     const u2 = onSnapshot(query(collection(db, 'questions'), where('roomId', '==', roomId)),
-      s => setQuestions(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))))
+      s => setItems(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))))
     const u3 = onSnapshot(query(collection(db, 'players'), where('roomId', '==', roomId)),
       s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.score || 0) - (a.score || 0))))
     const u4 = onSnapshot(query(collection(db, 'answers'), where('roomId', '==', roomId)),
@@ -59,59 +56,52 @@ export default function AdminControl() {
     return () => clearTimeout(t)
   }, [room?.status])
 
-  // ── Timer (only runs during 'question' phase) ──────────────────────────────
+  const curIdx = room?.currentQuestion ?? 0
+  const curItem = items[curIdx]
+  const isQuestion = curItem?.type === 'question'
+  const isSlide = curItem?.type === 'slide'
+
+  // ── Timer for QUESTIONS only ───────────────────────────────────────────────
   useEffect(() => {
-    const isQuestion = !room?.phase || room.phase === 'question'
-    if (!room || room.status !== 'playing' || !questions.length || !isQuestion) {
+    if (!room || room.status !== 'playing' || !items.length || !isQuestion) {
       clearInterval(timerRef.current)
       return
     }
-    const cqIdx = room.currentQuestion ?? 0
-    const cq    = questions[cqIdx]
-    if (!cq) return
-    if (lastQRef.current === cqIdx && room.phase === 'question') return
-    lastQRef.current  = cqIdx
+    if (lastIdxRef.current === curIdx) return
+    lastIdxRef.current = curIdx
     advancedRef.current = false
 
-    setTimer(cq.tempo || 30)
+    setTimer(curItem.tempo || 30)
     clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
       setTimer(t => { if (t <= 1) { clearInterval(timerRef.current); return 0 } return t - 1 })
     }, 1000)
     return () => clearInterval(timerRef.current)
-  }, [room?.currentQuestion, room?.status, room?.phase, questions.length])
+  }, [curIdx, room?.status, items.length, isQuestion])
 
-  // ── Auto-advance when ALL players answered ─────────────────────────────────
-  // Logic: if all answered → check if has explanation OR pause → go to that phase OR auto-advance after 3s
+  // ── Auto-advance when ALL answered (questions only) ────────────────────────
   useEffect(() => {
-    if (!room?.autoAdvance || room.status !== 'playing') return
-    if (!players.length || !questions.length) return
-    if (room.phase === 'explanation' || room.phase === 'pause') return
-    const cqIdx  = room.currentQuestion ?? 0
-    const curQ   = questions[cqIdx]
-    if (!curQ) return
-
-    const answeredCount = answers.filter(a => a.questionId === curQ.id).length
+    if (!room?.autoAdvance || room.status !== 'playing' || !isQuestion) return
+    if (!players.length || !items.length) return
+    
+    const answeredCount = answers.filter(a => a.questionId === curItem.id).length
     if (answeredCount < players.length) return
     if (advancedRef.current) return
     advancedRef.current = true
 
     const t = setTimeout(() => {
-      if (room.showExplain && curQ.explicacao) {
-        // Has explanation → go to explanation phase (manual advance)
-        updateDoc(doc(db, 'rooms', roomId), { phase: 'explanation' })
-      } else if (curQ.pauseImage) {
-        // Has pause image → go to pause phase (manual advance)
-        updateDoc(doc(db, 'rooms', roomId), { phase: 'pause' })
+      if (room.showExplain && curItem.explicacao) {
+        // Show explanation inline (no phase change, just display it)
+        // We'll handle this in the UI by checking if all answered + has explanation
       } else {
-        // No explanation, no pause → auto-advance with 3s timer
+        // Auto-advance with 3s timer
         setPauseTimer(3)
         clearInterval(pauseTimerRef.current)
         pauseTimerRef.current = setInterval(() => {
           setPauseTimer(t => {
             if (t <= 1) {
               clearInterval(pauseTimerRef.current)
-              advanceToNext(cqIdx)
+              advanceToNext()
               return 0
             }
             return t - 1
@@ -120,40 +110,56 @@ export default function AdminControl() {
       }
     }, 1200)
     return () => clearTimeout(t)
-  }, [answers.length, room?.autoAdvance, room?.currentQuestion, room?.phase, players.length])
+  }, [answers.length, room?.autoAdvance, curIdx, players.length, isQuestion])
 
-  // ── Auto-mode timer-based ──────────────────────────────────────────────────
+  // ── Auto-advance for SLIDES with duracao > 0 ───────────────────────────────
+  useEffect(() => {
+    clearInterval(slideTimerRef.current)
+    if (!room || room.status !== 'playing' || !isSlide || !curItem.duracao) return
+    
+    setSlideTimer(curItem.duracao)
+    slideTimerRef.current = setInterval(() => {
+      setSlideTimer(t => {
+        if (t <= 1) {
+          clearInterval(slideTimerRef.current)
+          advanceToNext()
+          return 0
+        }
+        return t - 1
+      })
+    }, 1000)
+    return () => clearInterval(slideTimerRef.current)
+  }, [curIdx, room?.status, isSlide, curItem?.duracao])
+
+  // ── Auto-mode timer ────────────────────────────────────────────────────────
   useEffect(() => {
     clearTimeout(autoRef.current)
-    if (!room?.autoMode || room.status !== 'playing' || !questions.length) return
-    if (room.phase === 'explanation' || room.phase === 'pause') return
-    const cqIdx = room.currentQuestion ?? 0
-    const cq    = questions[cqIdx]
-    if (!cq) return
-    const totalMs = ((cq.tempo || 30) + (room.autoInterval || 5)) * 1000
+    if (!room?.autoMode || room.status !== 'playing' || !items.length || !isQuestion) return
+    
+    const totalMs = ((curItem.tempo || 30) + (room.autoInterval || 5)) * 1000
     autoRef.current = setTimeout(() => {
       if (!advancedRef.current) {
         advancedRef.current = true
-        if (room.showExplain && cq.explicacao) {
-          updateDoc(doc(db, 'rooms', roomId), { phase: 'explanation' })
-        } else if (cq.pauseImage) {
-          updateDoc(doc(db, 'rooms', roomId), { phase: 'pause' })
-        } else {
-          advanceToNext(cqIdx)
-        }
+        advanceToNext()
       }
     }, totalMs)
     return () => clearTimeout(autoRef.current)
-  }, [room?.currentQuestion, room?.status, room?.phase, room?.autoMode, questions.length])
+  }, [curIdx, room?.status, room?.autoMode, items.length, isQuestion])
 
-  useEffect(() => () => { clearInterval(timerRef.current); clearTimeout(autoRef.current); clearInterval(pauseTimerRef.current) }, [])
-
-  const advanceToNext = (cqIdx) => {
+  useEffect(() => () => { 
+    clearInterval(timerRef.current)
+    clearTimeout(autoRef.current)
     clearInterval(pauseTimerRef.current)
-    if ((cqIdx ?? 0) < questions.length - 1) {
-      updateDoc(doc(db, 'rooms', roomId), { currentQuestion: (cqIdx ?? 0) + 1, phase: 'question' })
+    clearInterval(slideTimerRef.current)
+  }, [])
+
+  const advanceToNext = () => {
+    clearInterval(pauseTimerRef.current)
+    clearInterval(slideTimerRef.current)
+    if (curIdx < items.length - 1) {
+      updateDoc(doc(db, 'rooms', roomId), { currentQuestion: curIdx + 1 })
     } else {
-      updateDoc(doc(db, 'rooms', roomId), { status: 'finished', phase: 'question' })
+      updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })
         .then(() => navigate(`/room/${roomId}/podium`))
     }
   }
@@ -165,22 +171,9 @@ export default function AdminControl() {
     </div>
   )
 
-  const cqIdx        = room.currentQuestion ?? 0
-  const curQ         = questions[cqIdx]
-  const answeredForQ = answers.filter(a => a.questionId === curQ?.id)
-  const pct          = players.length ? Math.round(answeredForQ.length / players.length * 100) : 0
-  const timerWarn    = timer <= 5 && timer > 0
-  const timerPct     = curQ ? (timer / (curQ.tempo || 30)) * 100 : 0
-  const optStats     = (curQ?.opcoes || []).map((_, i) => answeredForQ.filter(a => a.resposta === i).length)
-  const maxStat      = Math.max(...optStats, 1)
-  const allAnswered  = players.length > 0 && answeredForQ.length >= players.length
-  const isExplanation = room.phase === 'explanation'
-  const isPause       = room.phase === 'pause'
-
   const lightBg = 'linear-gradient(160deg,#fce7f3,#ede9fe,#dbeafe)'
   const gameBg  = 'linear-gradient(160deg,#4f46e5 0%,#7c3aed 50%,#db2777 100%)'
-  const explBg  = 'linear-gradient(160deg,#1e1b4b,#312e81)'
-  const pauseBg = 'linear-gradient(160deg,#0f172a,#1e293b)'
+  const slideBg = 'linear-gradient(160deg,#0f172a,#1e293b)'
 
   // ── WAITING ────────────────────────────────────────────────────────────────
   if (room.status === 'waiting') return (
@@ -206,7 +199,7 @@ export default function AdminControl() {
           <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 10, wordBreak: 'break-all', fontWeight: 600 }}>{getJoinLink(roomId)}</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => { navigator.clipboard.writeText(getJoinLink(roomId)); toast.success('Link copiado!') }} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>📋 Link</button>
-            <button onClick={() => { navigator.clipboard.writeText(roomId); toast.success('PIN copiado!') }} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>🔑 PIN: {roomId}</button>
+            <button onClick={() => { navigator.clipboard.writeText(roomId); toast.success('PIN copiado!') }} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>🔑 PIN</button>
           </div>
         </div>
 
@@ -227,33 +220,40 @@ export default function AdminControl() {
         </div>
 
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <button
-            onClick={() => setQOpen(p => !p)}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+          <button onClick={() => setQOpen(p => !p)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: '#6b7280' }}>
-                📋 {questions.length} pergunta{questions.length !== 1 ? 's' : ''}
+                📋 {items.length} itens ({items.filter(i => i.type === 'question').length} ❓ + {items.filter(i => i.type === 'slide').length} 🖼)
               </span>
-              {room.showExplain && <span className="badge badge-purple" style={{ fontSize: 10 }}>💬 explicação</span>}
-              {room.autoAdvance && <span className="badge badge-green" style={{ fontSize: 10 }}>⚡ auto-avanço</span>}
             </div>
             <span style={{ color: '#8b5cf6', fontSize: 18, fontWeight: 700 }}>{qOpen ? '▲' : '▼'}</span>
           </button>
           {qOpen && (
             <div style={{ borderTop: '2px solid #dde3ff', padding: '12px 16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
-                {questions.map((q, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#f5f3ff', borderRadius: 8 }}>
-                    <span style={{ fontFamily: "'Fredoka One',cursive", color: '#8b5cf6', fontSize: 12, minWidth: 24, paddingTop: 1 }}>#{i+1}</span>
+                {items.map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: item.type === 'question' ? '#f5f3ff' : '#eff6ff', borderRadius: 8 }}>
+                    <span style={{ fontFamily: "'Fredoka One',cursive", color: item.type === 'question' ? '#8b5cf6' : '#3b82f6', fontSize: 12, minWidth: 24, paddingTop: 1 }}>#{i+1}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, color: '#1e1b4b', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontSize: 13 }}>{q.pergunta}</div>
-                      <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700, marginTop: 2 }}>
-                        {q.pontuacao}pts · {q.tempo}s · <span style={{ color: '#10b981' }}>✓ {LABELS[q.correta]}</span>
-                        {q.explicacao && <span style={{ color: '#8b5cf6' }}> · 💬</span>}
-                        {q.pauseImage && <span style={{ color: '#f59e0b' }}> · ⏸</span>}
-                      </div>
+                      {item.type === 'question' ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: '#1e1b4b', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontSize: 13 }}>
+                            ❓ {item.pergunta}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700, marginTop: 2 }}>
+                            {item.pontuacao}pts · {item.tempo}s · <span style={{ color: '#10b981' }}>✓ {LABELS[item.correta]}</span>
+                            {item.explicacao && <span style={{ color: '#8b5cf6' }}> · 💬</span>}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontWeight: 700, color: '#1e1b4b', fontSize: 13 }}>🖼 {item.titulo || 'Slide'}</div>
+                          <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 700, marginTop: 2 }}>
+                            {item.duracao === 0 ? 'Manual' : `Auto ${item.duracao}s`}
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <span className="badge badge-purple" style={{ fontSize: 10, flexShrink: 0 }}>{q.pontuacao}pts</span>
                   </div>
                 ))}
               </div>
@@ -262,7 +262,7 @@ export default function AdminControl() {
         </div>
 
         <button
-          onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'playing', currentQuestion: 0, phase: 'question' })}
+          onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'playing', currentQuestion: 0 })}
           disabled={players.length === 0}
           className="btn btn-primary" style={{ fontSize: 17, padding: '15px 24px' }}>
           {players.length === 0 ? '⏳ Aguardando jogadores…' : `🚀 Iniciar (${players.length} jogador${players.length !== 1 ? 'es' : ''})`}
@@ -271,205 +271,167 @@ export default function AdminControl() {
     </div>
   )
 
-  // ── PAUSE PHASE (showing pause image) ──────────────────────────────────────
-  if (room.status === 'playing' && isPause && curQ) return (
-    <div style={{ minHeight: '100vh', background: pauseBg, display: 'flex', flexDirection: 'column' }}>
+  // ── PLAYING - SLIDE ────────────────────────────────────────────────────────
+  if (room.status === 'playing' && isSlide) return (
+    <div style={{ minHeight: '100vh', background: slideBg, display: 'flex', flexDirection: 'column' }}>
       <div style={{ background: 'rgba(0,0,0,.25)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 20, color: '#fff' }}>OL Quiz! ⚡</span>
-        <span style={{ background: '#f59e0b', color: '#fff', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>⏸ Pausa</span>
-        <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{cqIdx+1}/{questions.length}</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ background: '#3b82f6', color: '#fff', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>🖼 Slide</span>
+          {curItem.duracao > 0 && slideTimer > 0 && (
+            <span style={{ background: '#fbbf24', color: '#1e1b4b', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>
+              {slideTimer}s
+            </span>
+          )}
+        </div>
+        <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{curIdx+1}/{items.length}</span>
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        {curQ.pauseImage && (
+        {curItem.titulo && (
+          <h2 style={{ fontFamily: "'Fredoka One',cursive", fontSize: 28, color: '#fff', marginBottom: 20, textAlign: 'center' }}>
+            {curItem.titulo}
+          </h2>
+        )}
+        {curItem.imagem && (
           <img 
-            src={curQ.pauseImage} 
-            alt="Pausa"
+            src={curItem.imagem} 
+            alt={curItem.titulo || 'Slide'}
             style={{ maxWidth: '90%', maxHeight: '70vh', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,.4)' }}
             onError={e => { e.target.style.display = 'none' }}
           />
         )}
-        <div style={{ marginTop: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 14, color: 'rgba(255,255,255,.6)', fontWeight: 700, marginBottom: 16 }}>
-            Clique para continuar
-          </div>
+        <div style={{ marginTop: 24 }}>
           <button
-            onClick={() => { advancedRef.current = true; advanceToNext(cqIdx) }}
+            onClick={() => { clearInterval(slideTimerRef.current); advanceToNext() }}
             className="btn btn-primary" style={{ fontSize: 17, padding: '15px 32px' }}>
-            {cqIdx < questions.length - 1 ? 'Próxima pergunta →' : '🏁 Encerrar quiz'}
+            {curIdx < items.length - 1 ? 'Próximo →' : '🏁 Encerrar'}
           </button>
         </div>
       </div>
     </div>
   )
 
-  // ── EXPLANATION PHASE ──────────────────────────────────────────────────────
-  if (room.status === 'playing' && isExplanation && curQ) return (
-    <div style={{ minHeight: '100vh', background: explBg, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: 'rgba(0,0,0,.25)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 20, color: '#fff' }}>OL Quiz! ⚡</span>
-        <span style={{ background: '#a78bfa', color: '#1e1b4b', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>💬 Explicação</span>
-        <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{cqIdx+1}/{questions.length}</span>
-      </div>
+  // ── PLAYING - QUESTION ─────────────────────────────────────────────────────
+  if (room.status === 'playing' && isQuestion) {
+    const answeredForQ = answers.filter(a => a.questionId === curItem.id)
+    const pct          = players.length ? Math.round(answeredForQ.length / players.length * 100) : 0
+    const timerWarn    = timer <= 5 && timer > 0
+    const timerPct     = (timer / (curItem.tempo || 30)) * 100
+    const optStats     = (curItem.opcoes || []).map((_, i) => answeredForQ.filter(a => a.resposta === i).length)
+    const maxStat      = Math.max(...optStats, 1)
+    const allAnswered  = players.length > 0 && answeredForQ.length >= players.length
+    const showExplanation = allAnswered && room.showExplain && curItem.explicacao
 
-      <div style={{ flex: 1, padding: '16px 14px', maxWidth: 700, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ background: 'rgba(255,255,255,.08)', border: '2px solid rgba(255,255,255,.15)', borderRadius: 14, padding: '16px 18px' }}>
-          <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.5)', marginBottom: 8 }}>Pergunta {cqIdx+1}</div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: '#fff', lineHeight: 1.4, marginBottom: 14 }}>{curQ.pergunta}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {curQ.opcoes.map((opt, i) => (
-              <div key={i} style={{ padding: '8px 12px', borderRadius: 10, border: `2px solid ${i === curQ.correta ? '#4ade80' : 'rgba(255,255,255,.15)'}`, background: i === curQ.correta ? 'rgba(74,222,128,.12)' : 'rgba(255,255,255,.05)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 14, color: i === curQ.correta ? '#4ade80' : 'rgba(255,255,255,.6)' }}>{OPT_SHAPES[i]}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: i === curQ.correta ? '#4ade80' : 'rgba(255,255,255,.7)' }}>{opt}</span>
-                {i === curQ.correta && <span style={{ marginLeft: 'auto', fontSize: 14 }}>✓</span>}
-              </div>
-            ))}
+    return (
+      <div style={{ minHeight: '100vh', background: gameBg, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ background: 'rgba(0,0,0,.2)', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 20, color: '#fff' }}>OL Quiz! ⚡</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {allAnswered && pauseTimer > 0 && !showExplanation && (
+              <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>
+                Próximo em {pauseTimer}s
+              </span>
+            )}
+            {allAnswered && <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>✅ Todos</span>}
+            <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>🔴 Ao vivo</span>
+          </div>
+          <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{curIdx+1}/{items.length}</span>
+        </div>
+
+        <div className="progress-wrap">
+          <div className="progress-fill" style={{ width: `${((curIdx+1)/items.length)*100}%` }} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px 6px' }}>
+          <div className={`timer-circle ${timerWarn ? 'warn' : ''}`} style={{ width: 56, height: 56, fontSize: 22 }}>{timer}</div>
+          <div className="timer-bar-wrap" style={{ flex: 1 }}>
+            <div className={`timer-bar ${timerWarn ? 'warn' : ''}`} style={{ width: `${timerPct}%` }} />
           </div>
         </div>
 
-        <div style={{ background: 'rgba(139,92,246,.15)', border: '2px solid rgba(139,92,246,.35)', borderRadius: 14, padding: '16px 18px' }}>
-          <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: '#a78bfa', marginBottom: 8 }}>💬 Explicação</div>
-          {curQ.explicacao ? (
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', lineHeight: 1.6 }}>{curQ.explicacao}</div>
-          ) : (
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,.4)', fontWeight: 600, fontStyle: 'italic' }}>Sem explicação cadastrada.</div>
-          )}
-        </div>
-
-        <div style={{ background: 'rgba(0,0,0,.2)', borderRadius: 12, padding: '12px 14px' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.4)', marginBottom: 8 }}>Distribuição</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 56, marginBottom: 6 }}>
-            {curQ.opcoes.map((_, i) => {
-              const cnt = optStats[i] || 0
-              const h   = Math.max(4, Math.round((cnt / maxStat) * 48))
-              return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <span style={{ fontWeight: 800, fontSize: 12, color: '#fff' }}>{cnt}</span>
-                  <div style={{ width: '100%', height: h, background: i === curQ.correta ? '#4ade80' : OPT_COLORS[i], borderRadius: '3px 3px 0 0', transition: 'height .4s', minHeight: 4 }} />
-                </div>
-              )
-            })}
+        <div style={{ padding: '0 12px 10px' }}>
+          <div className="q-card">
+            {curItem.imagem && <img src={curItem.imagem} alt="" onError={e => { e.target.style.display = 'none' }} />}
+            <div className="q-text">{curItem.pergunta}</div>
           </div>
         </div>
 
-        <button
-          onClick={() => { advancedRef.current = true; advanceToNext(cqIdx) }}
-          className="btn btn-primary" style={{ fontSize: 17, padding: '15px 24px' }}>
-          {cqIdx < questions.length - 1 ? 'Próxima pergunta →' : '🏁 Encerrar e ver pódio'}
-        </button>
-        <button onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })} className="btn btn-danger btn-sm">⏹ Encerrar agora</button>
-      </div>
-    </div>
-  )
-
-  // ── PLAYING (question phase) ───────────────────────────────────────────────
-  if (room.status === 'playing' && curQ) return (
-    <div style={{ minHeight: '100vh', background: gameBg, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: 'rgba(0,0,0,.2)', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: "'Fredoka One',cursive", fontSize: 20, color: '#fff' }}>OL Quiz! ⚡</span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {allAnswered && pauseTimer > 0 && !room.showExplain && !curQ.pauseImage && (
-            <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>
-              Próxima em {pauseTimer}s
-            </span>
-          )}
-          {allAnswered && !pauseTimer && <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>✅ Todos responderam</span>}
-          <span style={{ background: '#22c55e', color: '#fff', borderRadius: 99, padding: '4px 12px', fontWeight: 800, fontSize: 12 }}>🔴 Ao vivo</span>
-        </div>
-        <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 700 }}>{cqIdx+1}/{questions.length}</span>
-      </div>
-
-      <div className="progress-wrap">
-        <div className="progress-fill" style={{ width: `${((cqIdx+1)/questions.length)*100}%` }} />
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px 6px' }}>
-        <div className={`timer-circle ${timerWarn ? 'warn' : ''}`} style={{ width: 56, height: 56, fontSize: 22 }}>{timer}</div>
-        <div className="timer-bar-wrap" style={{ flex: 1 }}>
-          <div className={`timer-bar ${timerWarn ? 'warn' : ''}`} style={{ width: `${timerPct}%` }} />
-        </div>
-      </div>
-
-      <div style={{ padding: '0 12px 10px' }}>
-        <div className="q-card">
-          {curQ.imagem && <img src={curQ.imagem} alt="" onError={e => { e.target.style.display = 'none' }} />}
-          <div className="q-text">{curQ.pergunta}</div>
-        </div>
-      </div>
-
-      <div style={{ padding: '0 12px 10px' }}>
-        <div style={{ background: 'rgba(0,0,0,.25)', borderRadius: 12, padding: '12px 14px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 72, marginBottom: 6 }}>
-            {curQ.opcoes.map((_, i) => {
-              const cnt = optStats[i] || 0
-              const h   = Math.max(6, Math.round((cnt / maxStat) * 60))
-              return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                  <span style={{ fontWeight: 800, fontSize: 13, color: '#fff' }}>{cnt}</span>
-                  <div style={{ width: '100%', height: h, background: OPT_COLORS[i], borderRadius: '4px 4px 0 0', transition: 'height .5s', minHeight: 6 }} />
-                </div>
-              )
-            })}
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {curQ.opcoes.map((opt, i) => (
-              <div key={i} style={{ flex: 1, textAlign: 'center' }}>
-                <span style={{ fontSize: 14, color: i === curQ.correta ? '#4ade80' : 'rgba(255,255,255,.7)' }}>{OPT_SHAPES[i]}</span>
-                <div style={{ fontSize: 10, color: i === curQ.correta ? '#4ade80' : 'rgba(255,255,255,.5)', fontWeight: 700, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                  {i === curQ.correta ? '✓ ' : ''}{(opt||'').slice(0,10)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ padding: '0 12px 10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: allAnswered ? 'rgba(34,197,94,.15)' : 'rgba(255,255,255,.1)', border: `2px solid ${allAnswered ? 'rgba(34,197,94,.4)' : 'rgba(255,255,255,.15)'}`, borderRadius: 12, padding: '10px 14px', transition: 'all .3s' }}>
-          <span style={{ fontSize: 18 }}>✍️</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 13 }}>
-              <span style={{ color: 'rgba(255,255,255,.7)', fontWeight: 700 }}>Respostas</span>
-              <span style={{ fontFamily: "'Fredoka One',cursive", color: '#fbbf24' }}>{answeredForQ.length} / {players.length}</span>
+        <div style={{ padding: '0 12px 10px' }}>
+          <div style={{ background: 'rgba(0,0,0,.25)', borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 72, marginBottom: 6 }}>
+              {curItem.opcoes.map((_, i) => {
+                const cnt = optStats[i] || 0
+                const h   = Math.max(6, Math.round((cnt / maxStat) * 60))
+                return (
+                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                    <span style={{ fontWeight: 800, fontSize: 13, color: '#fff' }}>{cnt}</span>
+                    <div style={{ width: '100%', height: h, background: OPT_COLORS[i], borderRadius: '4px 4px 0 0', transition: 'height .5s', minHeight: 6 }} />
+                  </div>
+                )
+              })}
             </div>
-            <div style={{ height: 8, background: 'rgba(255,255,255,.2)', borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: allAnswered ? '#22c55e' : '#fbbf24', borderRadius: 99, transition: 'width .4s, background .3s' }} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              {curItem.opcoes.map((opt, i) => (
+                <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+                  <span style={{ fontSize: 14, color: i === curItem.correta ? '#4ade80' : 'rgba(255,255,255,.7)' }}>{OPT_SHAPES[i]}</span>
+                  <div style={{ fontSize: 10, color: i === curItem.correta ? '#4ade80' : 'rgba(255,255,255,.5)', fontWeight: 700, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    {i === curItem.correta ? '✓ ' : ''}{(opt||'').slice(0,10)}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </div>
 
-      <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {room.showExplain && curQ.explicacao ? (
-          <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { phase: 'explanation' }) }}
-            className="btn btn-white" style={{ fontSize: 16 }}>💬 Ver explicação</button>
-        ) : curQ.pauseImage ? (
-          <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { phase: 'pause' }) }}
-            className="btn btn-white" style={{ fontSize: 16 }}>⏸ Ver slide</button>
-        ) : (
-          cqIdx < questions.length - 1
-            ? <button onClick={() => { advancedRef.current = true; clearInterval(pauseTimerRef.current); updateDoc(doc(db, 'rooms', roomId), { currentQuestion: cqIdx + 1, phase: 'question' }) }} className="btn btn-white" style={{ fontSize: 16 }}>Próxima pergunta →</button>
-            : <button onClick={() => { advancedRef.current = true; updateDoc(doc(db, 'rooms', roomId), { status: 'finished', phase: 'question' }).then(() => navigate(`/room/${roomId}/podium`)) }} className="btn btn-success" style={{ fontSize: 16 }}>🏁 Encerrar</button>
+        {showExplanation && (
+          <div style={{ padding: '0 12px 10px' }}>
+            <div style={{ background: 'rgba(139,92,246,.15)', border: '2px solid rgba(139,92,246,.35)', borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: '#a78bfa', marginBottom: 6 }}>💬 Explicação</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.5 }}>{curItem.explicacao}</div>
+            </div>
+          </div>
         )}
-        <button onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })} className="btn btn-danger btn-sm">⏹ Encerrar agora</button>
-      </div>
 
-      <div style={{ padding: '0 12px 28px' }}>
-        <div style={{ fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.45)', marginBottom: 8 }}>📊 Ranking</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {players.slice(0,5).map((p,i) => <RankItem key={p.id} rank={i+1} player={p} delay={i*50} />)}
+        <div style={{ padding: '0 12px 10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: allAnswered ? 'rgba(34,197,94,.15)' : 'rgba(255,255,255,.1)', border: `2px solid ${allAnswered ? 'rgba(34,197,94,.4)' : 'rgba(255,255,255,.15)'}`, borderRadius: 12, padding: '10px 14px', transition: 'all .3s' }}>
+            <span style={{ fontSize: 18 }}>✍️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 13 }}>
+                <span style={{ color: 'rgba(255,255,255,.7)', fontWeight: 700 }}>Respostas</span>
+                <span style={{ fontFamily: "'Fredoka One',cursive", color: '#fbbf24' }}>{answeredForQ.length} / {players.length}</span>
+              </div>
+              <div style={{ height: 8, background: 'rgba(255,255,255,.2)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: allAnswered ? '#22c55e' : '#fbbf24', borderRadius: 99, transition: 'width .4s, background .3s' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button onClick={() => { clearInterval(pauseTimerRef.current); advanceToNext() }} className="btn btn-white" style={{ fontSize: 16 }}>
+            {curIdx < items.length - 1 ? 'Próximo →' : '🏁 Encerrar'}
+          </button>
+          <button onClick={() => updateDoc(doc(db, 'rooms', roomId), { status: 'finished' })} className="btn btn-danger btn-sm">⏹ Encerrar agora</button>
+        </div>
+
+        <div style={{ padding: '0 12px 28px' }}>
+          <div style={{ fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,.45)', marginBottom: 8 }}>📊 Ranking</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {players.slice(0,5).map((p,i) => <RankItem key={p.id} rank={i+1} player={p} delay={i*50} />)}
+          </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   // ── FINISHED ────────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', background: lightBg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px', gap: 14 }}>
       <div style={{ textAlign: 'center', marginBottom: 8 }}>
         <div style={{ fontSize: 60, marginBottom: 8 }}>🏁</div>
-        <h2 style={{ fontFamily: "'Fredoka One',cursive", fontSize: 28, color: '#1e1b4b' }}>Jogo encerrado!</h2>
-        <p style={{ color: '#6b7280', fontWeight: 700 }}>{players.length} participantes · {questions.length} perguntas</p>
+        <h2 style={{ fontFamily: "'Fredoka One',cursive", fontSize: 28, color: '#1e1b4b' }}>Apresentação encerrada!</h2>
+        <p style={{ color: '#6b7280', fontWeight: 700 }}>{players.length} participantes · {items.filter(i => i.type === 'question').length} perguntas</p>
       </div>
       <button onClick={() => navigate(`/room/${roomId}/podium`)} className="btn btn-primary" style={{ maxWidth: 340, fontSize: 17 }}>🏆 Ver pódio</button>
       <button onClick={() => navigate(`/room/${roomId}/ranking`)} className="btn btn-secondary" style={{ maxWidth: 340 }}>📊 Ranking completo</button>

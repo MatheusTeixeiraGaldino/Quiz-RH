@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useStore } from '../store'
-import { OPT_SHAPES, OPT_CLS, LABELS, OPT_COLORS } from '../components/UI'
+import { OPT_SHAPES, OPT_CLS, LABELS } from '../components/UI'
 
 export default function PlayerGame() {
   const { roomId }   = useParams()
@@ -16,20 +16,20 @@ export default function PlayerGame() {
   const playerId     = user?.uid
 
   const [room,      setRoom]      = useState(null)
-  const [questions, setQuestions] = useState([])
+  const [items,     setItems]     = useState([]) // questions + slides
   const [answered,  setAnswered]  = useState({})
   const [myScore,   setMyScore]   = useState(0)
   const [timer,     setTimer]     = useState(30)
-  const [phase,     setPhase]     = useState('question') // 'question' | 'feedback' | 'explanation' | 'pause'
+  const [phase,     setPhase]     = useState('question') // 'question' | 'feedback'
   const [lastPts,   setLastPts]   = useState(0)
   const [streak,    setStreak]    = useState(0)
 
   const timerRef    = useRef(null)
-  const lastQIdxRef = useRef(-1)
+  const lastIdxRef  = useRef(-1)
   const roomRef     = useRef(null)
-  const questionsRef = useRef([])
-  roomRef.current      = room
-  questionsRef.current = questions
+  const itemsRef    = useRef([])
+  roomRef.current   = room
+  itemsRef.current  = items
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function PlayerGame() {
     if (!roomId) return
     return onSnapshot(
       query(collection(db, 'questions'), where('roomId', '==', roomId)),
-      s => setQuestions(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)))
+      s => setItems(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)))
     )
   }, [roomId])
 
@@ -59,57 +59,41 @@ export default function PlayerGame() {
     )
   }, [roomId, playerId])
 
-  // ── Timer (only runs during 'question' phase) ──────────────────────────────
+  const curIdx = room?.currentQuestion ?? 0
+  const curItem = items[curIdx]
+  const isQuestion = curItem?.type === 'question'
+  const isSlide = curItem?.type === 'slide'
+
+  // ── Timer (only for questions) ─────────────────────────────────────────────
   useEffect(() => {
-    if (!room || !questions.length) return
-    if (room.status !== 'playing') { clearInterval(timerRef.current); return }
-    
-    const isQuestion = !room.phase || room.phase === 'question'
-    if (!isQuestion) {
+    if (!room || !items.length) return
+    if (room.status !== 'playing' || !isQuestion) {
       clearInterval(timerRef.current)
       return
     }
 
-    const cqIdx = room.currentQuestion ?? 0
-    const cq    = questions[cqIdx]
-    if (!cq) return
-
-    if (lastQIdxRef.current === cqIdx && room.phase === 'question') return
-    lastQIdxRef.current = cqIdx
+    if (lastIdxRef.current === curIdx) return
+    lastIdxRef.current = curIdx
 
     clearInterval(timerRef.current)
     setPhase('question')
-    setTimer(cq.tempo || 30)
+    setTimer(curItem.tempo || 30)
 
     timerRef.current = setInterval(() => {
       setTimer(t => { if (t <= 1) { clearInterval(timerRef.current); return 0 } return t - 1 })
     }, 1000)
     return () => clearInterval(timerRef.current)
-  }, [room?.currentQuestion, room?.status, room?.phase, questions.length])
-
-  // ── Sync phase with room.phase ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!room) return
-    if (room.phase === 'explanation') {
-      setPhase('explanation')
-    } else if (room.phase === 'pause') {
-      setPhase('pause')
-    } else if (room.phase === 'question' || !room.phase) {
-      if (phase === 'explanation' || phase === 'pause') {
-        setPhase('question')
-      }
-    }
-  }, [room?.phase])
+  }, [curIdx, room?.status, items.length, isQuestion])
 
   useEffect(() => () => clearInterval(timerRef.current), [])
 
   // ── Answer ─────────────────────────────────────────────────────────────────
   const answer = useCallback(async (idx) => {
-    const r = roomRef.current; const qs = questionsRef.current
+    const r = roomRef.current; const its = itemsRef.current
     if (!r || !playerId) return
-    const cqIdx = r.currentQuestion ?? 0
-    const q = qs[cqIdx]
-    if (!q || answered[q.id] !== undefined || timer === 0) return
+    const cIdx = r.currentQuestion ?? 0
+    const q = its[cIdx]
+    if (!q || q.type !== 'question' || answered[q.id] !== undefined || timer === 0) return
 
     const isCorrect = idx === q.correta
     const timeBonus = isCorrect ? Math.max(0, Math.round((timer / (q.tempo || 30)) * q.pontuacao * 0.5)) : 0
@@ -148,15 +132,16 @@ export default function PlayerGame() {
   }, [answered, timer, playerId, roomId, soundEnabled])
 
   // ── Guards ─────────────────────────────────────────────────────────────────
-  if (!room || questions.length === 0) return (
+  if (!room || items.length === 0) return (
     <div className="game-bg" style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minHeight:'100vh' }}>
       <div className="spinner" style={{ borderColor:'rgba(255,255,255,.25)', borderTopColor:'#fff', width:44, height:44, borderWidth:4 }} />
-      <p style={{ color:'rgba(255,255,255,.7)', fontWeight:700, fontSize:16 }}>Carregando sala…</p>
+      <p style={{ color:'rgba(255,255,255,.7)', fontWeight:700, fontSize:16 }}>Carregando…</p>
     </div>
   )
 
   // ── FINISHED ────────────────────────────────────────────────────────────────
   if (room.status === 'finished') {
+    const questions = items.filter(i => i.type === 'question')
     const correct = questions.filter(q => answered[q.id] === q.correta).length
     const wrong   = questions.filter(q => answered[q.id] !== undefined && answered[q.id] !== q.correta).length
     const missed  = questions.filter(q => answered[q.id] === undefined).length
@@ -170,7 +155,7 @@ export default function PlayerGame() {
         <div style={{ flex:1, overflowY:'auto', padding:'16px 14px 32px', maxWidth:500, margin:'0 auto', width:'100%' }}>
           <div style={{ textAlign:'center', marginBottom:20 }}>
             <div style={{ fontSize:56, animation:'bounceIn .6s ease' }}>🏁</div>
-            <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:28, color:'#fff', marginTop:8 }}>Fim de jogo!</div>
+            <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:28, color:'#fff', marginTop:8 }}>Fim!</div>
             <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:48, color:'#fbbf24', lineHeight:1, marginTop:4 }}>
               {myScore.toLocaleString('pt-BR')}
             </div>
@@ -188,7 +173,7 @@ export default function PlayerGame() {
           </div>
 
           <div style={{ marginBottom:16 }}>
-            <div style={{ fontWeight:800, fontSize:13, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:10 }}>📋 Resumo por pergunta</div>
+            <div style={{ fontWeight:800, fontSize:13, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:10 }}>📋 Resumo</div>
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {questions.map((q, i) => {
                 const myAns   = answered[q.id]
@@ -202,7 +187,6 @@ export default function PlayerGame() {
                       <div style={{ fontSize:20, flexShrink:0 }}>{!hasAns ? '⏭' : isOk ? '✅' : '❌'}</div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontWeight:700, fontSize:14, color:'#fff', lineHeight:1.35, marginBottom:4 }}>
-                          <span style={{ fontFamily:"'Fredoka One',cursive", color:'rgba(255,255,255,.5)', marginRight:6, fontSize:12 }}>#{i+1}</span>
                           {q.pergunta}
                         </div>
                         {hasAns && !isOk && (
@@ -217,11 +201,6 @@ export default function PlayerGame() {
                         {q.explicacao && (
                           <div style={{ fontSize:12, color:'rgba(255,255,255,.6)', marginTop:4, fontWeight:600, fontStyle:'italic' }}>
                             💬 {q.explicacao}
-                          </div>
-                        )}
-                        {hasAns && isOk && (
-                          <div style={{ fontSize:11, color:'#fbbf24', fontWeight:800, marginTop:2 }}>
-                            +{q.pontuacao} pts
                           </div>
                         )}
                       </div>
@@ -240,36 +219,32 @@ export default function PlayerGame() {
     )
   }
 
-  const cqIdx   = room.currentQuestion ?? 0
-  const q       = questions[cqIdx]
-
-  if (!q) return (
+  if (!curItem) return (
     <div className="game-bg" style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minHeight:'100vh' }}>
       <div style={{ fontSize:52, animation:'pulse 1.5s infinite' }}>⏳</div>
-      <p style={{ color:'rgba(255,255,255,.8)', fontWeight:700, fontSize:18 }}>Aguardando pergunta…</p>
+      <p style={{ color:'rgba(255,255,255,.8)', fontWeight:700, fontSize:18 }}>Aguardando…</p>
     </div>
   )
 
-  const myAns   = answered[q.id]
-  const hasAns  = myAns !== undefined
-  const isOk    = hasAns && myAns === q.correta
-  const timerWarn = timer <= 5
-  const timerPct  = Math.max(0, (timer / (q.tempo || 30)) * 100)
-
-  // ── PAUSE PHASE (showing pause/slide image) ────────────────────────────────
-  if (phase === 'pause') {
+  // ── SLIDE VIEW (players just watch) ────────────────────────────────────────
+  if (isSlide) {
     return (
       <div style={{ minHeight:'100vh', background:'linear-gradient(160deg,#0f172a,#1e293b)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24 }}>
-        {q.pauseImage && (
+        {curItem.titulo && (
+          <h2 style={{ fontFamily:"'Fredoka One',cursive", fontSize:28, color:'#fff', marginBottom:20, textAlign:'center' }}>
+            {curItem.titulo}
+          </h2>
+        )}
+        {curItem.imagem && (
           <img 
-            src={q.pauseImage} 
-            alt="Pausa"
+            src={curItem.imagem} 
+            alt={curItem.titulo || 'Slide'}
             style={{ maxWidth:'90%', maxHeight:'80vh', borderRadius:12, boxShadow:'0 8px 32px rgba(0,0,0,.5)' }}
             onError={e => { e.target.style.display = 'none' }}
           />
         )}
         <div style={{ marginTop:24, fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:700, textAlign:'center' }}>
-          Aguardando o palestrante…
+          Aguardando palestrante…
         </div>
         <div className="score-box" style={{ width:200, marginTop:12 }}>
           <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:2 }}>Sua pontuação</div>
@@ -279,32 +254,12 @@ export default function PlayerGame() {
     )
   }
 
-  // ── EXPLANATION PHASE ───────────────────────────────────────────────────────
-  if (phase === 'explanation') {
-    return (
-      <div style={{ minHeight:'100vh', background:'linear-gradient(160deg,#1e1b4b,#312e81)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24, textAlign:'center', gap:16 }}>
-        <div style={{ fontSize:14, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)' }}>💬 Explicação</div>
-        <div style={{ background:'rgba(255,255,255,.08)', border:'2px solid rgba(255,255,255,.15)', borderRadius:16, padding:'20px 18px', maxWidth:440, width:'100%' }}>
-          <div style={{ fontSize:14, fontWeight:700, color:'rgba(255,255,255,.6)', marginBottom:8 }}>Resposta correta:</div>
-          <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:22, color:'#4ade80', marginBottom:16 }}>
-            {LABELS[q.correta]} — {q.opcoes[q.correta]}
-          </div>
-          {q.explicacao ? (
-            <div style={{ fontSize:16, color:'#fff', fontWeight:700, lineHeight:1.5 }}>{q.explicacao}</div>
-          ) : (
-            <div style={{ fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:600, fontStyle:'italic' }}>Sem explicação</div>
-          )}
-        </div>
-        <div style={{ fontSize:14, color:'rgba(255,255,255,.5)', fontWeight:700, fontStyle:'italic' }}>
-          Aguardando o admin…
-        </div>
-        <div className="score-box" style={{ width:200, marginTop:4 }}>
-          <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.5)', marginBottom:2 }}>Total</div>
-          <div className="score-num">{myScore.toLocaleString('pt-BR')}</div>
-        </div>
-      </div>
-    )
-  }
+  // ── QUESTION VIEW ──────────────────────────────────────────────────────────
+  const myAns   = answered[curItem.id]
+  const hasAns  = myAns !== undefined
+  const isOk    = hasAns && myAns === curItem.correta
+  const timerWarn = timer <= 5
+  const timerPct  = Math.max(0, (timer / (curItem.tempo || 30)) * 100)
 
   // ── FEEDBACK PHASE ─────────────────────────────────────────────────────────
   if (phase === 'feedback' && hasAns) {
@@ -316,18 +271,26 @@ export default function PlayerGame() {
           <>
             <div style={{ fontSize:12, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.65)' }}>Pontos ganhos</div>
             <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:60, color:'#fbbf24', lineHeight:1 }}>+{lastPts.toLocaleString('pt-BR')}</div>
-            {streak >= 2 && <div style={{ fontSize:16, fontWeight:800, color:'#fde68a' }}>🔥 {streak} acertos seguidos!</div>}
+            {streak >= 2 && <div style={{ fontSize:16, fontWeight:800, color:'#fde68a' }}>🔥 {streak} seguidos!</div>}
           </>
         ) : (
           <div style={{ fontSize:15, color:'rgba(255,255,255,.85)', fontWeight:700, maxWidth:320 }}>
-            Resposta: <strong style={{ color:'#fbbf24' }}>{LABELS[q.correta]}</strong> — {q.opcoes[q.correta]}
+            Resposta: <strong style={{ color:'#fbbf24' }}>{LABELS[curItem.correta]}</strong> — {curItem.opcoes[curItem.correta]}
           </div>
         )}
+        
+        {curItem.explicacao && (
+          <div style={{ marginTop:8, maxWidth:400, background:'rgba(0,0,0,.2)', padding:'12px 16px', borderRadius:12, border:'2px solid rgba(255,255,255,.2)' }}>
+            <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.6)', marginBottom:6 }}>💬 Explicação</div>
+            <div style={{ fontSize:14, color:'#fff', fontWeight:600, lineHeight:1.5 }}>{curItem.explicacao}</div>
+          </div>
+        )}
+
         <div className="score-box" style={{ marginTop:8, width:220 }}>
           <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,.55)', marginBottom:2 }}>Total</div>
           <div className="score-num">{myScore.toLocaleString('pt-BR')}</div>
         </div>
-        <p style={{ color:'rgba(255,255,255,.45)', fontSize:13, fontWeight:700, marginTop:4 }}>Aguardando…</p>
+        <p style={{ color:'rgba(255,255,255,.45)', fontSize:13, fontWeight:700, marginTop:4 }}>Aguardando próxima…</p>
       </div>
     )
   }
@@ -336,35 +299,35 @@ export default function PlayerGame() {
   return (
     <div className="game-bg" style={{ display:'flex', flexDirection:'column', minHeight:'100vh' }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', background:'rgba(0,0,0,.18)' }}>
-        <span style={{ fontWeight:800, fontSize:13, color:'rgba(255,255,255,.65)' }}>{cqIdx+1} / {questions.length}</span>
+        <span style={{ fontWeight:800, fontSize:13, color:'rgba(255,255,255,.65)' }}>{curIdx+1} / {items.length}</span>
         <div className={`timer-circle ${timerWarn ? 'warn' : ''}`}>{timer}</div>
         <span style={{ fontFamily:"'Fredoka One',cursive", fontSize:16, color:'#fbbf24' }}>{myScore.toLocaleString('pt-BR')} pts</span>
       </div>
 
       <div className="progress-wrap">
-        <div className="progress-fill" style={{ width:`${((cqIdx+1)/questions.length)*100}%` }} />
+        <div className="progress-fill" style={{ width:`${((curIdx+1)/items.length)*100}%` }} />
       </div>
 
       <div style={{ padding:'8px 14px 4px', display:'flex', alignItems:'center', gap:10 }}>
         <div className="timer-bar-wrap">
           <div className={`timer-bar ${timerWarn ? 'warn' : ''}`} style={{ width:`${timerPct}%` }} />
         </div>
-        <span style={{ fontSize:11, color:'rgba(255,255,255,.5)', fontWeight:700, flexShrink:0 }}>{q.pontuacao} pts</span>
+        <span style={{ fontSize:11, color:'rgba(255,255,255,.5)', fontWeight:700, flexShrink:0 }}>{curItem.pontuacao} pts</span>
       </div>
 
       <div style={{ padding:'0 12px 10px' }}>
         <div className="q-card">
-          {q.imagem && <img src={q.imagem} alt="pergunta" onError={e => { e.target.style.display='none' }} />}
-          <div className="q-text">{q.pergunta}</div>
+          {curItem.imagem && <img src={curItem.imagem} alt="pergunta" onError={e => { e.target.style.display='none' }} />}
+          <div className="q-text">{curItem.pergunta}</div>
         </div>
       </div>
 
       <div style={{ padding:'0 12px', flex:1 }}>
         <div className="opt-grid">
-          {q.opcoes.filter(Boolean).map((opt, i) => {
+          {curItem.opcoes.filter(Boolean).map((opt, i) => {
             let extra = ''
             if (hasAns) {
-              if (i === q.correta) extra = 'correct'
+              if (i === curItem.correta) extra = 'correct'
               else if (i === myAns) extra = 'wrong-my'
               else extra = 'wrong'
             }
